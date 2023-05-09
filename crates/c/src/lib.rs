@@ -13,7 +13,7 @@ use wit_bindgen_core::{
 use wit_component::StringEncoding;
 
 #[derive(Default)]
-struct C {
+pub struct C {
     src: Source,
     opts: Opts,
     includes: Vec<String>,

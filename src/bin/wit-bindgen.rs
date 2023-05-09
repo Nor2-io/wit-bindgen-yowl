@@ -39,6 +39,15 @@ enum Opt {
         args: Common,
     },
 
+    /// Generates bindings for C# guest modules.
+    #[cfg(feature = "csharp")]
+    CSharp {
+        #[clap(flatten)]
+        opts: wit_bindgen_csharp::Opts,
+        #[clap(flatten)]
+        args: Common,
+    },
+
     /// Generates bindings for TeaVM-based Java guest modules.
     #[cfg(feature = "teavm-java")]
     TeavmJava {
@@ -87,6 +96,8 @@ fn main() -> Result<()> {
         Opt::Markdown { opts, args } => (opts.build(), args),
         #[cfg(feature = "c")]
         Opt::C { opts, args } => (opts.build(), args),
+        #[cfg(feature = "csharp")]
+        Opt::CSharp { opts, args } => (opts.build(), args),
         #[cfg(feature = "rust")]
         Opt::Rust { opts, args } => (opts.build(), args),
         #[cfg(feature = "teavm-java")]

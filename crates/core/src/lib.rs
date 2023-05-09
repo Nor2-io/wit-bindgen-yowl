@@ -410,10 +410,7 @@ pub trait WorldGenerator {
         self.finish(resolve, id, files);
     }
 
-    fn preprocess(&mut self, resolve: &Resolve, world: WorldId) {
-        drop(resolve);
-        drop(world);
-    }
+    fn preprocess(&mut self, _resolve: &Resolve, _world: WorldId) {}
 
     fn import_interface(
         &mut self,

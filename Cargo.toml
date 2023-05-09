@@ -11,10 +11,7 @@ CLI tool to generate bindings for WIT documents and the component model.
 """
 
 [workspace]
-members = [
-  "crates/test-rust-wasm",
-  "crates/wasi_snapshot_preview1",
-]
+members = ["crates/test-rust-wasm", "crates/wasi_snapshot_preview1"]
 resolver = "2"
 
 [workspace.package]
@@ -23,7 +20,7 @@ edition = "2021"
 [workspace.dependencies]
 anyhow = "1.0.70"
 bitflags = "2.1.0"
-heck =  { version = "0.4", features = ["unicode"] }
+heck = { version = "0.4", features = ["unicode"] }
 pulldown-cmark = { version = "0.9", default-features = false }
 clap = { version = "4.2.2", features = ["derive"] }
 env_logger = "0.10.0"
@@ -37,6 +34,7 @@ wit-component = "0.8.2"
 
 wit-bindgen-core = { path = 'crates/core', version = '0.6.0' }
 wit-bindgen-c = { path = 'crates/c', version = '0.6.0' }
+wit-bindgen-csharp = { path = 'crates/csharp', version = '0.1.0' }
 wit-bindgen-rust = { path = "crates/rust", version = "0.6.0" }
 wit-bindgen-teavm-java = { path = 'crates/teavm-java', version = '0.6.0' }
 wit-bindgen-go = { path = 'crates/go', version = '0.4.0' }
@@ -54,16 +52,22 @@ clap = { workspace = true }
 wit-bindgen-core = { workspace = true }
 wit-bindgen-rust = { workspace = true, features = ['clap'], optional = true }
 wit-bindgen-c = { workspace = true, features = ['clap'], optional = true }
-wit-bindgen-markdown = { workspace = true, features = ['clap'], optional = true }
-wit-bindgen-teavm-java = { workspace = true, features = ['clap'], optional = true }
+wit-bindgen-csharp = { workspace = true, features = ['clap'], optional = true }
+wit-bindgen-markdown = { workspace = true, features = [
+  'clap',
+], optional = true }
+wit-bindgen-teavm-java = { workspace = true, features = [
+  'clap',
+], optional = true }
 wit-bindgen-go = { workspace = true, features = ['clap'], optional = true }
 wat = { workspace = true }
 wit-component = { workspace = true }
 wasm-encoder = { workspace = true }
 
 [features]
-default = ['c', 'rust', 'markdown', 'teavm-java', 'go']
+default = ['c', 'rust', 'markdown', 'teavm-java', 'go', 'csharp']
 c = ['dep:wit-bindgen-c']
+csharp = ['dep:wit-bindgen-csharp']
 rust = ['dep:wit-bindgen-rust']
 markdown = ['dep:wit-bindgen-markdown']
 teavm-java = ['dep:wit-bindgen-teavm-java']

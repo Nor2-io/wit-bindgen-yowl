@@ -1861,6 +1861,7 @@ dependencies = [
  "wat",
  "wit-bindgen-c",
  "wit-bindgen-core",
+ "wit-bindgen-csharp",
  "wit-bindgen-go",
  "wit-bindgen-markdown",
  "wit-bindgen-rust",
@@ -1876,6 +1877,19 @@ dependencies = [
  "anyhow",
  "wit-component",
  "wit-parser 0.7.1",
+]
+
+[[package]]
+name = "wit-bindgen-csharp"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "heck",
+ "test-helpers",
+ "wasm-metadata",
+ "wit-bindgen-c",
+ "wit-bindgen-core",
+ "wit-component",
 ]
 
 [[package]]
