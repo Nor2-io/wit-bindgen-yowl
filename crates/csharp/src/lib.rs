@@ -1,4 +1,7 @@
+mod component_type_object;
+
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
+use wit_component::StringEncoding;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
@@ -15,6 +18,7 @@ use wit_bindgen_core::{
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
+
 //cargo run c-sharp --out-dir testing-csharp tests/codegen/floats.wit
 
 const CSHARP_IMPORTS: &str = "\
@@ -46,6 +50,8 @@ const C_IMPORTS: &str = "\
 pub struct Opts {
     /// Whether or not to generate a stub class for exported functions
     #[cfg_attr(feature = "clap", arg(long))]
+    pub string_encoding: StringEncoding,
+    #[arg(short, long, default_value_t = false)]
     pub generate_stub: bool,
 }
 
@@ -197,7 +203,8 @@ impl WorldGenerator for CSharp {
 
     fn finish(&mut self, resolve: &Resolve, id: WorldId, files: &mut Files) {
         let world = &resolve.worlds[id];
-        let namespace = format!("wit_{}", world.name.to_snake_case());
+        let snake = world.name.to_snake_case();
+        let namespace = format!("wit_{snake}");
         let name = world.name.to_upper_camel_case();
 
         let version = env!("CARGO_PKG_VERSION");
@@ -316,6 +323,12 @@ impl WorldGenerator for CSharp {
             );
 
             files.push(&format!("{name}.cs"), indent(&body).as_bytes());
+            files.push(
+                &format!("{snake}_component_type.o",),
+                component_type_object::object(resolve, id, self.opts.string_encoding)
+                    .unwrap()
+                    .as_slice(),
+            );
         };
 
         if self.opts.generate_stub {
