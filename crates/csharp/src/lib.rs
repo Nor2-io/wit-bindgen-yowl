@@ -14,7 +14,7 @@ use wit_bindgen_core::{
         abi::{AbiVariant, Bindgen, Instruction, LiftLower, WasmType},
         Case, Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
         Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Union,
-        Variant, WorldId,
+        Variant, WorldId, WorldKey
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
@@ -62,6 +62,11 @@ impl Opts {
             ..CSharp::default()
         })
     }
+}
+
+enum Direction {
+    Import,
+    Export,
 }
 
 struct InterfaceFragment {
@@ -114,18 +119,19 @@ impl WorldGenerator for CSharp {
     fn import_interface(
         &mut self,
         resolve: &Resolve,
-        name: &str,
+        key: &WorldKey,
         id: InterfaceId,
         _files: &mut Files,
     ) {
-        self.interface_names.insert(id, name.to_owned());
-        let mut gen = self.interface(resolve, name);
+        let name = interface_name(resolve, key, Direction::Import);
+        self.interface_names.insert(id, name.clone());
+        let mut gen = self.interface(resolve, &name);
         gen.types(id);
 
         // C
         uwriteln!(gen.c_src, "void attach_internal_calls() {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.import(name, func);
+            gen.import(&resolve.name_world_key(key), func);
         }
         uwriteln!(gen.c_src, "}}");
 
@@ -152,16 +158,17 @@ impl WorldGenerator for CSharp {
     fn export_interface(
         &mut self,
         resolve: &Resolve,
-        name: &str,
+        key: &WorldKey,
         id: InterfaceId,
         _files: &mut Files,
     ) {
-        self.interface_names.insert(id, name.to_owned());
-        let mut gen = self.interface(resolve, name);
+        let name = interface_name(resolve, key, Direction::Export);
+        self.interface_names.insert(id, name.clone());
+        let mut gen = self.interface(resolve, &name);
         gen.types(id);
 
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.export(func, Some(name));
+            gen.export(func, Some(&resolve.name_world_key(key)));
         }
 
         gen.add_interface_fragment();
@@ -501,7 +508,7 @@ impl InterfaceGenerator<'_> {
         });
     }
 
-    fn import(&mut self, module: &str, func: &Function) {
+    fn import(&mut self, module: &String, func: &Function) {
         if func.kind != FunctionKind::Freestanding {
             todo!("resources");
         }
@@ -1124,6 +1131,8 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
             TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
             TypeDefKind::Future(_) => todo!("generate for future"),
             TypeDefKind::Stream(_) => todo!("generate for stream"),
+            TypeDefKind::Resource => todo!("generate for resource"),
+            TypeDefKind::Handle(_) => todo!("generate for handle"),
             TypeDefKind::Unknown => unreachable!(),
         }
     }
@@ -1395,6 +1404,8 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::GuestDeallocateVariant { .. } => todo!("GuestDeallocateString"),
 
             Instruction::GuestDeallocateList { .. } => todo!("GuestDeallocateList"),
+            Instruction::HandleLower { handle, name, ty } => todo!(),
+            Instruction::HandleLift { handle, name, ty } => todo!("HandleLeft"),
         }
     }
 
@@ -1507,6 +1518,46 @@ fn indent(code: &str) -> String {
         indented.push('\n');
     }
     indented
+}
+
+fn world_name(resolve: &Resolve, world: WorldId) -> String {
+    format!(
+        "wit.worlds.{}",
+        resolve.worlds[world].name.to_upper_camel_case()
+    )
+}
+
+fn interface_name(resolve: &Resolve, name: &WorldKey, direction: Direction) -> String {
+    let pkg = match name {
+        WorldKey::Name(_) => None,
+        WorldKey::Interface(id) => {
+            let pkg = resolve.interfaces[*id].package.unwrap();
+            Some(resolve.packages[pkg].name.clone())
+        }
+    };
+
+    let name = match name {
+        WorldKey::Name(name) => name,
+        WorldKey::Interface(id) => resolve.interfaces[*id].name.as_ref().unwrap(),
+    }
+    .to_upper_camel_case();
+
+    format!(
+        "wit.{}.{}{name}",
+        match direction {
+            Direction::Import => "imports",
+            Direction::Export => "exports",
+        },
+        if let Some(name) = &pkg {
+            format!(
+                "{}.{}.",
+                name.namespace.to_csharp_ident(),
+                name.name.to_csharp_ident()
+            )
+        } else {
+            String::new()
+        }
+    )
 }
 
 fn is_primitive(ty: &Type) -> bool {

@@ -14,13 +14,14 @@ mod flavorful;
 mod lists;
 mod many_arguments;
 mod numbers;
+mod ownership;
 mod records;
 mod smoke;
 mod strings;
 mod unions;
 mod variants;
 
-wasmtime::component::bindgen!("testwasi" in "crates/wasi_snapshot_preview1/wit");
+wasmtime::component::bindgen!(in "crates/wasi_snapshot_preview1/wit");
 
 #[derive(Default)]
 struct Wasi<T>(T);
@@ -46,6 +47,19 @@ fn run_test<T, U>(
 where
     T: Default,
 {
+    run_test_from_dir(name, name, add_to_linker, instantiate, test)
+}
+
+fn run_test_from_dir<T, U>(
+    dir_name: &str,
+    name: &str,
+    add_to_linker: fn(&mut Linker<Wasi<T>>) -> Result<()>,
+    instantiate: fn(&mut Store<Wasi<T>>, &Component, &Linker<Wasi<T>>) -> Result<(U, Instance)>,
+    test: fn(U, &mut Store<Wasi<T>>) -> Result<()>,
+) -> Result<()>
+where
+    T: Default,
+{
     // Create an engine with caching enabled to assist with iteration in this
     // project.
     let mut config = Config::new();
@@ -54,7 +68,7 @@ where
     config.wasm_component_model(true);
     let engine = Engine::new(&config)?;
 
-    for wasm in tests(name)? {
+    for wasm in tests(name, dir_name)? {
         let component = Component::from_file(&engine, &wasm)?;
         let mut linker = Linker::new(&engine);
 
@@ -70,11 +84,11 @@ where
     Ok(())
 }
 
-fn tests(name: &str) -> Result<Vec<PathBuf>> {
+fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     let mut result = Vec::new();
 
     let mut dir = PathBuf::from("./tests/runtime");
-    dir.push(name);
+    dir.push(dir_name);
 
     let mut resolve = Resolve::new();
     let (pkg, _files) = resolve.push_dir(&dir).unwrap();
@@ -211,10 +225,7 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
     }
 
     #[cfg(feature = "go")]
-    if !go.is_empty()
-        // FIXME: needs fixing after #545
-        && false
-    {
+    if !go.is_empty() {
         let world_name = &resolve.worlds[world].name;
         let out_dir = out_dir.join(format!("go-{}", world_name));
         drop(fs::remove_dir_all(&out_dir));
@@ -292,8 +303,6 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
 
     #[cfg(feature = "teavm-java")]
     if !java.is_empty() {
-        use heck::*;
-
         const DEPTH_FROM_TARGET_DIR: u32 = 2;
 
         let base_dir = {
@@ -320,37 +329,38 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
             .build()
             .generate(&resolve, world, &mut files);
 
-        let package_dir = java_dir.join(&format!("wit_{world_name}"));
-        fs::create_dir_all(&package_dir).unwrap();
+        let mut dst_files = Vec::new();
+
+        fs::create_dir_all(&java_dir).unwrap();
         for (file, contents) in files.iter() {
-            let dst = package_dir.join(file);
-            fs::write(dst, contents).unwrap();
+            let dst = java_dir.join(file);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::write(&dst, contents).unwrap();
+            dst_files.push(dst);
         }
 
-        let snake = world_name.to_snake_case();
-        let upper = world_name.to_upper_camel_case();
         for java_impl in java {
-            fs::copy(
-                &java_impl,
-                &package_dir.join(java_impl.file_name().unwrap()),
-            )
-            .unwrap();
+            let dst = java_dir.join(
+                java_impl
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('_', "/"),
+            );
+            fs::copy(&java_impl, &dst).unwrap();
+            dst_files.push(dst);
         }
+
+        let main = java_dir.join("Main.java");
 
         fs::write(
-            &java_dir.join("Main.java"),
+            &main,
             include_bytes!("../../crates/teavm-java/tests/Main.java"),
         )
         .unwrap();
 
-        let dst_files = fs::read_dir(&package_dir).unwrap().filter_map(|entry| {
-            let path = entry.unwrap().path();
-            if let Some("java") = path.extension().map(|ext| ext.to_str().unwrap()) {
-                Some(path)
-            } else {
-                None
-            }
-        });
+        dst_files.push(main);
 
         let mut cmd = Command::new("javac");
         cmd.arg("-cp")
@@ -358,7 +368,7 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
             .arg("-d")
             .arg(out_dir.join("target/classes"));
 
-        for file in dst_files {
+        for file in &dst_files {
             cmd.arg(file);
         }
 
@@ -377,13 +387,6 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
             panic!("failed to build");
         }
 
-        let preserved = &[
-            &format!("wit_{snake}.{upper}"),
-            &format!("wit_{snake}.{upper}World"),
-            &format!("wit_{snake}.Imports"),
-            &format!("wit_{snake}.Exports"),
-        ];
-
         let mut cmd = Command::new("java");
         cmd.arg("-jar")
             .arg(&teavm_cli_jar)
@@ -397,8 +400,16 @@ fn tests(name: &str) -> Result<Vec<PathBuf>> {
             .arg("-O")
             .arg("1");
 
-        for preserved in preserved {
-            cmd.arg("--preserve-class").arg(preserved);
+        for file in dst_files {
+            cmd.arg("--preserve-class").arg(
+                file.strip_prefix(&java_dir)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .strip_suffix(".java")
+                    .unwrap()
+                    .replace('/', "."),
+            );
         }
 
         cmd.arg("Main");

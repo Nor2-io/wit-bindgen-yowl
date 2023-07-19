@@ -1,57 +1,59 @@
 use anyhow::Result;
-use exports::*;
 use wasmtime::Store;
 
-wasmtime::component::bindgen!("world" in "tests/runtime/flavorful");
+wasmtime::component::bindgen!(in "tests/runtime/flavorful");
+
+use exports::test::flavorful::test::*;
+use test::flavorful::test as test_imports;
 
 #[derive(Default)]
 pub struct MyImports {
     errored: bool,
 }
 
-impl imports::Host for MyImports {
-    fn f_list_in_record1(&mut self, ty: imports::ListInRecord1Result) -> Result<()> {
+impl test_imports::Host for MyImports {
+    fn f_list_in_record1(&mut self, ty: test_imports::ListInRecord1) -> Result<()> {
         assert_eq!(ty.a, "list_in_record1");
         Ok(())
     }
 
-    fn f_list_in_record2(&mut self) -> Result<imports::ListInRecord2> {
-        Ok(imports::ListInRecord2 {
+    fn f_list_in_record2(&mut self) -> Result<test_imports::ListInRecord2> {
+        Ok(test_imports::ListInRecord2 {
             a: "list_in_record2".to_string(),
         })
     }
 
     fn f_list_in_record3(
         &mut self,
-        a: imports::ListInRecord3Result,
-    ) -> Result<imports::ListInRecord3Result> {
+        a: test_imports::ListInRecord3,
+    ) -> Result<test_imports::ListInRecord3> {
         assert_eq!(a.a, "list_in_record3 input");
-        Ok(imports::ListInRecord3Result {
+        Ok(test_imports::ListInRecord3 {
             a: "list_in_record3 output".to_string(),
         })
     }
 
     fn f_list_in_record4(
         &mut self,
-        a: imports::ListInAliasResult,
-    ) -> Result<imports::ListInAliasResult> {
+        a: test_imports::ListInAlias,
+    ) -> Result<test_imports::ListInAlias> {
         assert_eq!(a.a, "input4");
-        Ok(imports::ListInRecord4Result {
+        Ok(test_imports::ListInRecord4 {
             a: "result4".to_string(),
         })
     }
 
     fn f_list_in_variant1(
         &mut self,
-        a: imports::ListInVariant1V1Result,
-        b: imports::ListInVariant1V2Result,
-        c: imports::ListInVariant1V3Result,
+        a: test_imports::ListInVariant1V1,
+        b: test_imports::ListInVariant1V2,
+        c: test_imports::ListInVariant1V3,
     ) -> Result<()> {
         assert_eq!(a.unwrap(), "foo");
         assert_eq!(b.unwrap_err(), "bar");
         match c {
-            imports::ListInVariant1V3Result::String(s) => assert_eq!(s, "baz"),
-            imports::ListInVariant1V3Result::F32(_) => panic!(),
+            test_imports::ListInVariant1V3::String(s) => assert_eq!(s, "baz"),
+            test_imports::ListInVariant1V3::F32(_) => panic!(),
         }
         Ok(())
     }
@@ -60,28 +62,28 @@ impl imports::Host for MyImports {
         Ok(Some("list_in_variant2".to_string()))
     }
 
-    fn f_list_in_variant3(&mut self, a: imports::ListInVariant3Result) -> Result<Option<String>> {
+    fn f_list_in_variant3(&mut self, a: test_imports::ListInVariant3) -> Result<Option<String>> {
         assert_eq!(a.unwrap(), "input3");
         Ok(Some("output3".to_string()))
     }
 
-    fn errno_result(&mut self) -> Result<Result<(), imports::MyErrno>> {
+    fn errno_result(&mut self) -> Result<Result<(), test_imports::MyErrno>> {
         if self.errored {
             return Ok(Ok(()));
         }
-        imports::MyErrno::A.to_string();
-        format!("{:?}", imports::MyErrno::A);
+        test_imports::MyErrno::A.to_string();
+        format!("{:?}", test_imports::MyErrno::A);
         fn assert_error<T: std::error::Error>() {}
-        assert_error::<imports::MyErrno>();
+        assert_error::<test_imports::MyErrno>();
         self.errored = true;
-        Ok(Err(imports::MyErrno::B))
+        Ok(Err(test_imports::MyErrno::B))
     }
 
     fn list_typedefs(
         &mut self,
-        a: imports::ListTypedefResult,
-        b: imports::ListTypedef3Result,
-    ) -> Result<(imports::ListTypedef2, imports::ListTypedef3Result)> {
+        a: test_imports::ListTypedef,
+        b: test_imports::ListTypedef3,
+    ) -> Result<(test_imports::ListTypedef2, test_imports::ListTypedef3)> {
         assert_eq!(a, "typedef1");
         assert_eq!(b.len(), 1);
         assert_eq!(b[0], "typedef2");
@@ -92,15 +94,18 @@ impl imports::Host for MyImports {
         &mut self,
         bools: Vec<bool>,
         results: Vec<Result<(), ()>>,
-        enums: Vec<imports::MyErrno>,
-    ) -> Result<(Vec<bool>, Vec<Result<(), ()>>, Vec<imports::MyErrno>)> {
+        enums: Vec<test_imports::MyErrno>,
+    ) -> Result<(Vec<bool>, Vec<Result<(), ()>>, Vec<test_imports::MyErrno>)> {
         assert_eq!(bools, [true, false]);
         assert_eq!(results, [Ok(()), Err(())]);
-        assert_eq!(enums, [imports::MyErrno::Success, imports::MyErrno::A]);
+        assert_eq!(
+            enums,
+            [test_imports::MyErrno::Success, test_imports::MyErrno::A]
+        );
         Ok((
             vec![false, true],
             vec![Err(()), Ok(())],
-            vec![imports::MyErrno::A, imports::MyErrno::B],
+            vec![test_imports::MyErrno::A, test_imports::MyErrno::B],
         ))
     }
 }
@@ -117,12 +122,12 @@ fn run() -> Result<()> {
 
 fn run_test(exports: Flavorful, store: &mut Store<crate::Wasi<MyImports>>) -> Result<()> {
     exports.call_test_imports(&mut *store)?;
-    let exports = exports.exports();
+    let exports = exports.test_flavorful_test();
 
     exports.call_f_list_in_record1(
         &mut *store,
-        ListInRecord1Param {
-            a: "list_in_record1",
+        &ListInRecord1 {
+            a: "list_in_record1".to_string(),
         },
     )?;
     assert_eq!(
@@ -134,8 +139,8 @@ fn run_test(exports: Flavorful, store: &mut Store<crate::Wasi<MyImports>>) -> Re
         exports
             .call_f_list_in_record3(
                 &mut *store,
-                ListInRecord3Param {
-                    a: "list_in_record3 input"
+                &ListInRecord3 {
+                    a: "list_in_record3 input".to_string()
                 }
             )?
             .a,
@@ -144,23 +149,28 @@ fn run_test(exports: Flavorful, store: &mut Store<crate::Wasi<MyImports>>) -> Re
 
     assert_eq!(
         exports
-            .call_f_list_in_record4(&mut *store, ListInAliasParam { a: "input4" })?
+            .call_f_list_in_record4(
+                &mut *store,
+                &ListInAlias {
+                    a: "input4".to_string()
+                }
+            )?
             .a,
         "result4"
     );
 
     exports.call_f_list_in_variant1(
         &mut *store,
-        Some("foo"),
-        Err("bar"),
-        ListInVariant1V3Param::String("baz"),
+        &Some("foo".to_string()),
+        &Err("bar".to_string()),
+        &ListInVariant1V3::String("baz".to_string()),
     )?;
     assert_eq!(
         exports.call_f_list_in_variant2(&mut *store)?,
         Some("list_in_variant2".to_string())
     );
     assert_eq!(
-        exports.call_f_list_in_variant3(&mut *store, Some("input3"))?,
+        exports.call_f_list_in_variant3(&mut *store, &Some("input3".to_string()))?,
         Some("output3".to_string())
     );
 
@@ -170,7 +180,11 @@ fn run_test(exports: Flavorful, store: &mut Store<crate::Wasi<MyImports>>) -> Re
     fn assert_error<T: std::error::Error>() {}
     assert_error::<MyErrno>();
 
-    let (a, b) = exports.call_list_typedefs(&mut *store, "typedef1", &["typedef2"])?;
+    let (a, b) = exports.call_list_typedefs(
+        &mut *store,
+        &"typedef1".to_string(),
+        &vec!["typedef2".to_string()],
+    )?;
     assert_eq!(a, b"typedef3");
     assert_eq!(b.len(), 1);
     assert_eq!(b[0], "typedef4");

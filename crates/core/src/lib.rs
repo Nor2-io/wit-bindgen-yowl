@@ -80,11 +80,13 @@ impl Types {
             live.add_type(resolve, ty);
         }
         for id in live.iter() {
-            let info = self.type_info.get_mut(&id).unwrap();
-            if import {
-                info.borrowed = true;
-            } else {
-                info.owned = true;
+            if resolve.types[id].name.is_some() {
+                let info = self.type_info.get_mut(&id).unwrap();
+                if import {
+                    info.borrowed = true;
+                } else {
+                    info.owned = true;
+                }
             }
         }
         let mut live = LiveTypes::default();
@@ -93,7 +95,9 @@ impl Types {
             live.add_type(resolve, ty);
         }
         for id in live.iter() {
-            self.type_info.get_mut(&id).unwrap().owned = true;
+            if resolve.types[id].name.is_some() {
+                self.type_info.get_mut(&id).unwrap().owned = true;
+            }
         }
 
         for ty in func.results.iter_types() {
@@ -106,6 +110,18 @@ impl Types {
                 _ => continue,
             };
             if let Some(Type::Id(id)) = err {
+                // When an interface `use`s a type from another interface, it creates a new typeid
+                // referring to the definition typeid. Chase any chain of references down to the
+                // typeid of the definition.
+                fn resolve_type_definition_id(resolve: &Resolve, mut id: TypeId) -> TypeId {
+                    loop {
+                        match resolve.types[id].kind {
+                            TypeDefKind::Type(Type::Id(def_id)) => id = def_id,
+                            _ => return id,
+                        }
+                    }
+                }
+                let id = resolve_type_definition_id(resolve, *id);
                 self.type_info.get_mut(&id).unwrap().error = true;
             }
         }
@@ -163,6 +179,9 @@ impl Types {
             TypeDefKind::Stream(stream) => {
                 info = self.optional_type_info(resolve, stream.element.as_ref());
                 info |= self.optional_type_info(resolve, stream.end.as_ref());
+            }
+            TypeDefKind::Resource | TypeDefKind::Handle(_) => {
+                todo!("implement resources")
             }
             TypeDefKind::Unknown => unreachable!(),
         }
@@ -380,13 +399,20 @@ pub trait WorldGenerator {
         let world = &resolve.worlds[id];
         self.preprocess(resolve, id);
 
+        fn unwrap_name(key: &WorldKey) -> &str {
+            match key {
+                WorldKey::Name(name) => name,
+                WorldKey::Interface(_) => panic!("unexpected interface key"),
+            }
+        }
+
         let mut funcs = Vec::new();
         let mut types = Vec::new();
         for (name, import) in world.imports.iter() {
             match import {
-                WorldItem::Function(f) => funcs.push((name.as_str(), f)),
+                WorldItem::Function(f) => funcs.push((unwrap_name(name), f)),
                 WorldItem::Interface(id) => self.import_interface(resolve, name, *id, files),
-                WorldItem::Type(id) => types.push((name.as_str(), *id)),
+                WorldItem::Type(id) => types.push((unwrap_name(name), *id)),
             }
         }
         if !types.is_empty() {
@@ -397,32 +423,44 @@ pub trait WorldGenerator {
         }
         funcs.clear();
 
+        // First generate bindings for any freestanding functions, if any. If
+        // these refer to types defined in the world they need to refer to the
+        // imported types generated above.
+        //
+        // Interfaces are then generated afterwards so if the same interface is
+        // both imported and exported the right types are all used everywhere.
+        let mut interfaces = Vec::new();
         for (name, export) in world.exports.iter() {
             match export {
-                WorldItem::Function(f) => funcs.push((name.as_str(), f)),
-                WorldItem::Interface(id) => self.export_interface(resolve, name, *id, files),
+                WorldItem::Function(f) => funcs.push((unwrap_name(name), f)),
+                WorldItem::Interface(id) => interfaces.push((name, id)),
                 WorldItem::Type(_) => unreachable!(),
             }
         }
         if !funcs.is_empty() {
             self.export_funcs(resolve, id, &funcs, files);
         }
+        for (name, id) in interfaces {
+            self.export_interface(resolve, name, *id, files);
+        }
         self.finish(resolve, id, files);
     }
 
-    fn preprocess(&mut self, _resolve: &Resolve, _world: WorldId) {}
+    fn preprocess(&mut self, resolve: &Resolve, world: WorldId) {
+        let _ = (resolve, world);
+    }
 
     fn import_interface(
         &mut self,
         resolve: &Resolve,
-        name: &str,
+        name: &WorldKey,
         iface: InterfaceId,
         files: &mut Files,
     );
     fn export_interface(
         &mut self,
         resolve: &Resolve,
-        name: &str,
+        name: &WorldKey,
         iface: InterfaceId,
         files: &mut Files,
     );
@@ -495,6 +533,9 @@ pub trait InterfaceGenerator<'a> {
             TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
             TypeDefKind::Future(_) => todo!("generate for future"),
             TypeDefKind::Stream(_) => todo!("generate for stream"),
+            TypeDefKind::Resource | TypeDefKind::Handle(_) => {
+                todo!("implement resources")
+            }
             TypeDefKind::Unknown => unreachable!(),
         }
     }

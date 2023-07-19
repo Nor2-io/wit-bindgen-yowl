@@ -2,9 +2,10 @@ use proc_macro2::{Span, TokenStream};
 use std::path::{Path, PathBuf};
 use syn::parse::{Error, Parse, ParseStream, Result};
 use syn::punctuated::Punctuated;
-use syn::{token, Token};
+use syn::{braced, token, Token};
 use wit_bindgen_core::wit_parser::{PackageId, Resolve, UnresolvedPackage, WorldId};
 use wit_bindgen_rust::Opts;
+use wit_bindgen_rust_lib::Ownership;
 
 #[proc_macro]
 pub fn generate(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -60,10 +61,11 @@ impl Parse for Config {
                     Opt::UseStdFeature => opts.std_feature = true,
                     Opt::RawStrings => opts.raw_strings = true,
                     Opt::MacroExport => opts.macro_export = true,
-                    Opt::DuplicateIfNecessary => opts.duplicate_if_necessary = true,
+                    Opt::Ownership(ownership) => opts.ownership = ownership,
                     Opt::MacroCallPrefix(prefix) => opts.macro_call_prefix = Some(prefix.value()),
                     Opt::ExportMacroName(name) => opts.export_macro_name = Some(name.value()),
                     Opt::Skip(list) => opts.skip.extend(list.iter().map(|i| i.value())),
+                    Opt::RuntimePath(path) => opts.runtime_path = Some(path.value()),
                 }
             }
         } else {
@@ -98,14 +100,13 @@ fn parse_source(source: &Option<Source>) -> anyhow::Result<(Resolve, PackageId, 
         } else {
             let pkg = UnresolvedPackage::parse_file(path)?;
             files.extend(pkg.source_files().map(|s| s.to_owned()));
-            resolve.push(pkg, &Default::default())
+            resolve.push(pkg)
         }
     };
     let pkg = match source {
-        Some(Source::Inline(s)) => resolve.push(
-            UnresolvedPackage::parse("macro-input".as_ref(), &s)?,
-            &Default::default(),
-        )?,
+        Some(Source::Inline(s)) => {
+            resolve.push(UnresolvedPackage::parse("macro-input".as_ref(), &s)?)?
+        }
         Some(Source::Path(s)) => parse(&root.join(&s))?,
         None => parse(&root.join("wit"))?,
     };
@@ -147,7 +148,8 @@ mod kw {
     syn::custom_keyword!(world);
     syn::custom_keyword!(path);
     syn::custom_keyword!(inline);
-    syn::custom_keyword!(duplicate_if_necessary);
+    syn::custom_keyword!(ownership);
+    syn::custom_keyword!(runtime_path);
 }
 
 enum Opt {
@@ -160,7 +162,8 @@ enum Opt {
     MacroCallPrefix(syn::LitStr),
     ExportMacroName(syn::LitStr),
     Skip(Vec<syn::LitStr>),
-    DuplicateIfNecessary,
+    Ownership(Ownership),
+    RuntimePath(syn::LitStr),
 }
 
 impl Parse for Opt {
@@ -187,9 +190,44 @@ impl Parse for Opt {
         } else if l.peek(kw::macro_export) {
             input.parse::<kw::macro_export>()?;
             Ok(Opt::MacroExport)
-        } else if l.peek(kw::duplicate_if_necessary) {
-            input.parse::<kw::duplicate_if_necessary>()?;
-            Ok(Opt::DuplicateIfNecessary)
+        } else if l.peek(kw::ownership) {
+            input.parse::<kw::ownership>()?;
+            input.parse::<Token![:]>()?;
+            let ownership = input.parse::<syn::Ident>()?;
+            Ok(Opt::Ownership(match ownership.to_string().as_str() {
+                "Owning" => Ownership::Owning,
+                "Borrowing" => Ownership::Borrowing {
+                    duplicate_if_necessary: {
+                        let contents;
+                        braced!(contents in input);
+                        let field = contents.parse::<syn::Ident>()?;
+                        match field.to_string().as_str() {
+                            "duplicate_if_necessary" => {
+                                contents.parse::<Token![:]>()?;
+                                contents.parse::<syn::LitBool>()?.value
+                            }
+                            name => {
+                                return Err(Error::new(
+                                    field.span(),
+                                    format!(
+                                        "unrecognized `Ownership::Borrowing` field: `{name}`; \
+                                         expected `duplicate_if_necessary`"
+                                    ),
+                                ));
+                            }
+                        }
+                    },
+                },
+                name => {
+                    return Err(Error::new(
+                        ownership.span(),
+                        format!(
+                            "unrecognized ownership: `{name}`; \
+                             expected `Owning` or `Borrowing`"
+                        ),
+                    ));
+                }
+            }))
         } else if l.peek(kw::macro_call_prefix) {
             input.parse::<kw::macro_call_prefix>()?;
             input.parse::<Token![:]>()?;
@@ -205,6 +243,10 @@ impl Parse for Opt {
             syn::bracketed!(contents in input);
             let list = Punctuated::<_, Token![,]>::parse_terminated(&contents)?;
             Ok(Opt::Skip(list.iter().cloned().collect()))
+        } else if l.peek(kw::runtime_path) {
+            input.parse::<kw::runtime_path>()?;
+            input.parse::<Token![:]>()?;
+            Ok(Opt::RuntimePath(input.parse()?))
         } else {
             Err(l.error())
         }

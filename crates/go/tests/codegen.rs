@@ -5,12 +5,6 @@ use std::path::Path;
 use std::process::Command;
 
 macro_rules! codegen_test {
-    // TODO: should fix this test
-    (lift_lower_foreign $name:tt $test:tt) => {};
-    (unused_import $name:tt $test:tt) => {};
-    (issue544 $name:tt $test:tt) => {};
-    (issue551 $name:tt $test:tt) => {};
-
     ($id:ident $name:tt $test:tt) => {
         #[test]
         fn $id() {
@@ -28,7 +22,7 @@ macro_rules! codegen_test {
     };
 }
 
-test_helpers::codegen_tests!("*.wit");
+test_helpers::codegen_tests!();
 
 fn verify(dir: &Path, name: &str) {
     let name = name.to_kebab_case();
