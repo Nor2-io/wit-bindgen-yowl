@@ -11,9 +11,6 @@ C# bindings generator for WIT and the component model, typically used
 through the `wit-bindgen-cli` crate.
 """
 
-[lib]
-test = false
-doctest = false
 
 [dependencies]
 wasm-encoder = { workspace = true }
