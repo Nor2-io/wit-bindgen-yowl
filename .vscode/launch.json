@@ -718,6 +718,10 @@
                     "-p",
                     "wit-bindgen-csharp"
                 ],
+                "filter": {
+                    "name": "codegen",
+                    "kind": "test"
+                }
             },
             "args": [],
             "cwd": "${workspaceFolder}",
