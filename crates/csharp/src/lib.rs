@@ -421,7 +421,7 @@ impl InterfaceGenerator<'_> {
         });
     }
 
-    fn import(&mut self, module: &String, func: &Function) {
+    fn import(&mut self, _module: &String, func: &Function) {
         if func.kind != FunctionKind::Freestanding {
             todo!("resources");
         }
@@ -488,7 +488,7 @@ impl InterfaceGenerator<'_> {
 
     }
 
-    fn export(&mut self, func: &Function, interface_name: Option<&str>) {
+    fn export(&mut self, func: &Function, _interface_name: Option<&str>) {
         let sig = self.resolve.wasm_signature(AbiVariant::GuestExport, func);
 
         let mut bindgen = FunctionBindgen::new(
@@ -1031,10 +1031,10 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
 }
 
 struct Block {
-    body: String,
-    results: Vec<String>,
-    element: String,
-    base: String,
+    _body: String,
+    _results: Vec<String>,
+    _xelement: String,
+    _xbase: String,
 }
 
 struct BlockStorage {
@@ -1296,8 +1296,8 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::GuestDeallocateVariant { .. } => todo!("GuestDeallocateString"),
 
             Instruction::GuestDeallocateList { .. } => todo!("GuestDeallocateList"),
-            Instruction::HandleLower { handle, name, ty } => todo!(),
-            Instruction::HandleLift { handle, name, ty } => todo!("HandleLeft"),
+            Instruction::HandleLower { handle: _, name: _, ty: _ } => todo!(),
+            Instruction::HandleLift { handle: _, name: _, ty: _dir } => todo!("HandleLeft"),
         }
     }
 
@@ -1323,10 +1323,10 @@ impl Bindgen for FunctionBindgen<'_, '_> {
         } = self.block_storage.pop().unwrap();
 
         self.blocks.push(Block {
-            body: mem::replace(&mut self.src, body),
-            results: mem::take(operands),
-            element,
-            base,
+            _body: mem::replace(&mut self.src, body),
+            _results: mem::take(operands),
+            _xelement: element,
+            _xbase: base,
         });
     }
 
@@ -1412,12 +1412,12 @@ fn indent(code: &str) -> String {
     indented
 }
 
-fn world_name(resolve: &Resolve, world: WorldId) -> String {
-    format!(
-        "wit.worlds.{}",
-        resolve.worlds[world].name.to_upper_camel_case()
-    )
-}
+// fn world_name(resolve: &Resolve, world: WorldId) -> String {
+//     format!(
+//         "wit.worlds.{}",
+//         resolve.worlds[world].name.to_upper_camel_case()
+//     )
+// }
 
 fn interface_name(resolve: &Resolve, name: &WorldKey, direction: Direction) -> String {
     let pkg = match name {
