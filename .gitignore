@@ -8,3 +8,6 @@ ace
 __pycache__
 
 /testing-csharp/Wit.*
+.vs/
+**/bin/*
+**/obj/*

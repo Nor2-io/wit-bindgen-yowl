@@ -34,8 +34,9 @@ using System.Runtime.InteropServices;
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 pub struct Opts {
     /// Whether or not to generate a stub class for exported functions
-    #[cfg_attr(feature = "clap", arg(long))]
+    #[cfg_attr(feature = "clap", arg(long, default_value_t = StringEncoding::default()))]
     pub string_encoding: StringEncoding,
+    #[cfg_attr(feature = "clap", arg(long))]
     pub generate_stub: bool,
 }
 
