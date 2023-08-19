@@ -17,6 +17,7 @@ macro_rules! codegen_test {
                     }
                     .build()
                     .generate(resolve, world, files)
+                    .unwrap()
                 },
                 verify,
             )

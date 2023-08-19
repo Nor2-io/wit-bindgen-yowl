@@ -18,6 +18,7 @@ use wit_bindgen_core::{
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
+use anyhow::Result;
 
 //cargo run c-sharp --out-dir testing-csharp tests/codegen/floats.wit
 
@@ -163,7 +164,7 @@ impl WorldGenerator for CSharp {
         key: &WorldKey,
         id: InterfaceId,
         _files: &mut Files,
-    ) {
+    ) -> Result<()> {
         let name = interface_name(resolve, key, Direction::Export);
         self.interface_names.insert(id, name.clone());
         let mut gen = self.interface(resolve, &name);
@@ -174,6 +175,7 @@ impl WorldGenerator for CSharp {
         }
 
         gen.add_interface_fragment(true);
+        Ok(())
     }
 
     fn export_funcs(
@@ -182,7 +184,7 @@ impl WorldGenerator for CSharp {
         world: WorldId,
         funcs: &[(&str, &Function)],
         _files: &mut Files,
-    ) {
+    )-> Result<()> {
         let name = &format!("{}-world", resolve.worlds[world].name);
         let mut gen = self.interface(resolve, name);
 
@@ -191,9 +193,10 @@ impl WorldGenerator for CSharp {
         }
 
         gen.add_world_fragment();
+        Ok(())
     }
 
-    fn export_types(
+    fn import_types(
         &mut self,
         resolve: &Resolve,
         world: WorldId,
@@ -1034,6 +1037,9 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
             TypeDefKind::Unknown => unreachable!(),
         }
     }
+
+    fn type_resource(&mut self, _id: TypeId, _name: &str, _docs: &Docs) { todo!() }
+
 }
 
 struct Block {
