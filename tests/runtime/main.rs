@@ -455,16 +455,16 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         result.push(component_path);
     }
 
-    #[cfg(feature = "c-sharp")]
+    #[cfg(feature = "csharp")]
     for path in c.iter() {
         let world_name = &resolve.worlds[world].name;
-        let out_dir = out_dir.join(format!("c-{}", world_name));
+        let out_dir = out_dir.join(format!("csharp-{}", world_name));
         drop(fs::remove_dir_all(&out_dir));
         fs::create_dir_all(&out_dir).unwrap();
 
         let snake = world_name.replace("-", "_");
         let mut files = Default::default();
-        let mut opts = wit_bindgen_c::Opts::default();
+        let mut opts = wit_bindgen_csharp::Opts::default();
         if let Some(path) = path.file_name().and_then(|s| s.to_str()) {
             if path.contains("utf16") {
                 opts.string_encoding = wit_component::StringEncoding::UTF16;
@@ -481,9 +481,9 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             PathBuf::from(std::env::var_os("WASI_SDK_PATH").expect(
                 "point the `WASI_SDK_PATH` environment variable to the path of your wasi-sdk",
             ));
-        let mut cmd = Command::new(sdk.join("bin/clang"));
+        let mut cmd = Command::new(sdk.join("dotnet publish ..."));
         let out_wasm = out_dir.join(format!(
-            "c-{}.wasm",
+            "csharp-{}.wasm",
             path.file_stem().and_then(|s| s.to_str()).unwrap()
         ));
         cmd.arg("--sysroot").arg(sdk.join("share/wasi-sysroot"));

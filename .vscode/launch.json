@@ -729,6 +729,29 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug runtime tests with cargo in library 'wit-bindgen-csharp'",
+            "cargo" :{
+                "args": [
+                    "test",
+                    "--no-run",
+                    "chsarp",
+                    "--",
+                    "--F csharp",
+                    "-p",
+                    "wit-bindgen-cli",
+                    "--numbers"
+                ],
+                "filter": {
+                    "name": "runtime",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug integration test 'codegen'",
             "cargo": {
                 "args": [
