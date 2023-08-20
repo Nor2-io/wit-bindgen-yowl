@@ -653,7 +653,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .arg("-r")
             .arg("wasi-wasm")
             .arg("-c")
-            .arg("Release")
+            .arg("Debug")
             .arg("/p:PlatformTarget=AnyCPU")
             .arg("/p:MSBuildEnableWorkloadResolver=false")
             .arg("--self-contained")
