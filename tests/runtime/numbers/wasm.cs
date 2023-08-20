@@ -1,4 +1,6 @@
-namespace wit_numbers.Wit.exports.test.numbers.Test;
+namespace wit_numbers;
+
+using wit_numbers.Wit.exports.test.numbers.Test;
 
 using System;
 using System.Diagnostics;
@@ -7,7 +9,7 @@ public static class NumbersImpl : NumbersWorld
 {
     static void TestImports()
     {
-        Debug.Debug.Assert(TestImpl.RoundtripU8(1) == 1);
+        Debug.Assert(TestImpl.RoundtripU8(1) == 1);
         Debug.Assert(TestImpl.RoundtripU8(0) == 0);
         Debug.Assert(TestImpl.RoundtripU8(Byte.MaxValue) == Byte.MaxValue);
 
@@ -49,9 +51,9 @@ public static class NumbersImpl : NumbersWorld
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NegativeInfinity) == Double.NegativeInfinity);
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NaN) == Double.NaN);
 
-        Debug.Assert(TestImpl.RoundtripChar('a') == 'a');
-        Debug.Assert(TestImpl.RoundtripChar(' ') == ' ');
-        Debug.Assert(TestImpl.RoundtripChar(U'🚩') == U'🚩');
+        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32('a')) == Char.ConvertToUtf32('a'));
+        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32(' ')) == Char.ConvertToUtf32(' '));
+        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32("🚩"u8)) == Char.ConvertToUtf32("🚩"u8));
 
         TestImpl.SetScalar(2);
         Debug.Assert(TestImpl.GetScalar() == 2);
