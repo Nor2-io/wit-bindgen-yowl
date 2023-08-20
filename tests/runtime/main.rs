@@ -1,4 +1,5 @@
 use anyhow::Result;
+use heck::ToUpperCamelCase;
 use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
@@ -463,6 +464,16 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         fs::create_dir_all(&out_dir).unwrap();
 
         let snake = world_name.replace("-", "_");
+
+        let assembly_name = format!(
+            "csharp-{}",
+            path.file_stem().and_then(|s| s.to_str()).unwrap()
+        );
+
+        dbg!(&assembly_name);
+
+        let out_wasm = out_dir.join(&assembly_name);
+
         let mut files = Default::default();
         let mut opts = wit_bindgen_csharp::Opts::default();
         if let Some(path) = path.file_name().and_then(|s| s.to_str()) {
@@ -472,32 +483,181 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         }
         opts.build().generate(&resolve, world, &mut files).unwrap();
 
+        fs::write(
+            out_dir.join("nuget.config"),
+            r#"<?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+            <config>
+                <add key="globalPackagesFolder" value=".packages" />
+            </config>
+            <packageSources>
+            <!--To inherit the global NuGet package sources remove the <clear/> line below -->
+            <clear />
+            <add key="nuget" value="https://api.nuget.org/v3/index.json" />
+                <add key="dotnet-experimental" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json" />
+            <add key="nuget" value="https://api.nuget.org/v3/index.json" />
+          </packageSources>
+        </configuration>"#,
+        )?;
+
+        fs::write(
+            out_dir.join("rd.xml"),
+            format!(
+                r#"<Directives xmlns="http://schemas.microsoft.com/netfx/2013/01/metadata">
+            <Application>
+                <Assembly Name="{assembly_name}">
+                    <!--<Type Name="wit_the_world.Imports">
+                        --><!--<Method Name="float32Param" />--><!--
+                        <Method Name="float64Param" />
+                        <Method Name="float32Result" />
+                        <Method Name="float64Result" />
+                    </Type>-->
+                </Assembly>
+            </Application>
+        </Directives>"#
+            ),
+        )?;
+
+        let mut csproj = format!(
+            "<Project Sdk=\"Microsoft.NET.Sdk\">
+
+        <PropertyGroup>
+          <TargetFramework>net8.0</TargetFramework>
+          <RootNamespace>{assembly_name}</RootNamespace>
+          <ImplicitUsings>enable</ImplicitUsings>
+          <Nullable>enable</Nullable>
+        </PropertyGroup>
+          <PropertyGroup>
+              <PublishTrimmed>true</PublishTrimmed>
+              <AssemblyName>{assembly_name}</AssemblyName>
+          </PropertyGroup>
+          <ItemGroup>
+          "
+        );
+
         for (file, contents) in files.iter() {
             let dst = out_dir.join(file);
             fs::write(dst, contents).unwrap();
+
+            csproj.push_str(&format!("<Compile Include=\"{file}\" Link=\"{file}\"/>\n"));
         }
 
-        let sdk =
-            PathBuf::from(std::env::var_os("WASI_SDK_PATH").expect(
-                "point the `WASI_SDK_PATH` environment variable to the path of your wasi-sdk",
-            ));
-        let mut cmd = Command::new(sdk.join("dotnet publish ..."));
-        let out_wasm = out_dir.join(format!(
-            "csharp-{}.wasm",
-            path.file_stem().and_then(|s| s.to_str()).unwrap()
+        csproj.push_str("</ItemGroup>\n\n");
+        csproj.push_str(
+            r#"
+            <ItemGroup>
+                <RdXmlFile Include="rd.xml" />
+            </ItemGroup>
+            "#,
+        );
+
+        csproj.push_str("<ItemGroup>\n");
+        csproj.push_str(&format!(
+            "<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
         ));
-        cmd.arg("--sysroot").arg(sdk.join("share/wasi-sysroot"));
-        cmd.arg(path)
-            .arg(out_dir.join(format!("{snake}.c")))
-            .arg(out_dir.join(format!("{snake}_component_type.o")))
-            .arg("-I")
-            .arg(&out_dir)
-            .arg("-Wall")
-            .arg("-Wextra")
-            .arg("-Werror")
-            .arg("-Wno-unused-parameter")
-            .arg("-mexec-model=reactor")
-            .arg("-g")
+        csproj.push_str("</ItemGroup>\n\n");
+
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
+        csproj.push_str(
+            r#"
+            <ItemGroup>
+                <WasmImport Include="test:numbers/test!roundtrip-u8" />
+                <WasmImport Include="test:numbers/test!roundtrip-s8" />
+                <WasmImport Include="test:numbers/test!roundtrip-u16" />
+                <WasmImport Include="test:numbers/test!roundtrip-s16" />
+                <WasmImport Include="test:numbers/test!roundtrip-u32" />
+                <WasmImport Include="test:numbers/test!roundtrip-s32" />
+                <WasmImport Include="test:numbers/test!roundtrip-u64" />
+                <WasmImport Include="test:numbers/test!roundtrip-s64" />
+                <WasmImport Include="test:numbers/test!roundtrip-float32" />
+                <WasmImport Include="test:numbers/test!roundtrip-float64" />
+                <WasmImport Include="test:numbers/test!roundtrip-char" />
+                <WasmImport Include="test:numbers/test!set-scalar" />
+                <WasmImport Include="test:numbers/test!get-scalar" />
+            </ItemGroup>
+            "#,
+        );
+
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
+        csproj.push_str(
+            r#"
+            <ItemGroup>
+                <CustomLinkerArg Include="-Wl,--export,_initialize" />
+                <CustomLinkerArg Include="-Wl,--no-entry" />
+                <CustomLinkerArg Include="-mexec-model=reactor" />
+        
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
+            </ItemGroup>
+            "#,
+        );
+
+        csproj.push_str(
+            r#"
+                <ItemGroup>
+                    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+                    <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+                </ItemGroup>
+            </Project>
+            "#,
+        );
+
+        //TODO: The below doesn't seem to work as it's not generating any files?
+        //let csproj = format!(
+        //    "<Project Sdk=\"Microsoft.NET.Sdk\">
+        //
+        //    <PropertyGroup>
+        //        <OutputType>Exe</OutputType>
+        //        <TargetFramework>net8.0</TargetFramework>
+        //        <ImplicitUsings>enable</ImplicitUsings>
+        //        <Nullable>enable</Nullable>
+        //        <WitCompilerGeneratedFilesOutputPath>Generated</WitCompilerGeneratedFilesOutputPath>
+        //        <WitBindgenPath>C:\\dev\\wit-bindgen-yowl\\target\\debug</WitBindgenPath>
+        //    </PropertyGroup>
+        //
+        //    <ItemGroup>
+        //        <CompilerVisibleProperty Include=\"WitCompilerGeneratedFilesOutputPath\" />
+        //        <CompilerVisibleProperty Include=\"WitBindgenPath\" />
+        //
+        //        <AdditionalFiles Include=\"C:\\dev\\nor2-wit-csharp\\wit-bindgen-yowl\\tests\\numbers\\world.wit\" />
+        //    </ItemGroup>
+        //
+        //
+        //    <ItemGroup>
+        //        <ProjectReference Include=\"C:\\dev\\nor2-wit-csharp\\wit-bindgen-yowl\\testing-csharp\\WitSourceGen\\WitSourceGen\\WitSourceGen.csproj\"
+        //                          OutputItemType=\"Analyzer\"
+        //                          ReferenceOutputAssembly=\"false\" />
+        //    </ItemGroup>
+        //</Project>"
+        //);
+
+        let camel = snake.to_upper_camel_case();
+
+        fs::write(out_dir.join(format!("{camel}.csproj")), csproj)?;
+
+        let mut cmd = Command::new("dotnet");
+
+        cmd.arg("publish")
+            .arg(out_dir.join(format!("{camel}.csproj")))
+            .arg("-r")
+            .arg("wasi-wasm")
+            .arg("-c")
+            .arg("Release")
+            .arg("/p:PlatformTarget=AnyCPU")
+            .arg("/p:MSBuildEnableWorkloadResolver=false")
+            .arg("--self-contained")
+            .arg("/p:UseAppHost=false")
             .arg("-o")
             .arg(&out_wasm);
         println!("{:?}", cmd);
@@ -533,7 +693,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
 
         result.push(component_path);
     }
-
 
     Ok(result)
 }
