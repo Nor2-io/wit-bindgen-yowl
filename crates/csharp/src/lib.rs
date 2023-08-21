@@ -331,18 +331,19 @@ impl WorldGenerator for CSharp {
             );
 
             files.push(&format!("{stub_file_name}.cs"), indent(&body).as_bytes());
-            files.push(
-                &format!("{snake}_component_type.o",),
-                component_type_object::object(resolve, id, self.opts.string_encoding)
-                    .unwrap()
-                    .as_slice(),
-            );
         };
 
         // TODO: is the world Impl class useful?
         // if self.opts.generate_stub {
         //     generate_stub(format!("{name}"), files);
         // }
+
+        files.push(
+            &format!("{snake}_component_type.o",),
+            component_type_object::object(resolve, id, self.opts.string_encoding)
+                .unwrap()
+                .as_slice(),
+        );
 
         for (name, interface_type_and_fragments) in &self.interface_fragments {
             let fragments = &interface_type_and_fragments.interface_fragments;
