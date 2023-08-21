@@ -519,17 +519,18 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         let mut csproj = format!(
             "<Project Sdk=\"Microsoft.NET.Sdk\">
 
-        <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
-          <RootNamespace>{assembly_name}</RootNamespace>
-          <ImplicitUsings>enable</ImplicitUsings>
-          <Nullable>enable</Nullable>
-        </PropertyGroup>
-          <PropertyGroup>
-              <PublishTrimmed>true</PublishTrimmed>
-              <AssemblyName>{assembly_name}</AssemblyName>
-          </PropertyGroup>
-          "
+    <PropertyGroup>
+      <TargetFramework>net8.0</TargetFramework>
+      <RootNamespace>{assembly_name}</RootNamespace>
+      <ImplicitUsings>enable</ImplicitUsings>
+      <Nullable>enable</Nullable>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <PublishTrimmed>true</PublishTrimmed>
+        <AssemblyName>{assembly_name}</AssemblyName>
+    </PropertyGroup>
+    "
         );
 
         //csproj.push_str("<ItemGroup>\n");
@@ -544,71 +545,72 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         //csproj.push_str("</ItemGroup>\n\n");
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <RdXmlFile Include="rd.xml" />
-            </ItemGroup>
-            "#,
+    <ItemGroup>
+        <RdXmlFile Include="rd.xml" />
+    </ItemGroup>
+    
+"#,
         );
 
-        csproj.push_str("<ItemGroup>\n");
+        csproj.push_str("\t<ItemGroup>\n");
         csproj.push_str(&format!(
-            "<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
+            "\t\t<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
         ));
-        csproj.push_str("</ItemGroup>\n\n");
+        csproj.push_str("\t</ItemGroup>\n\n");
 
         //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <WasmImport Include="test:numbers/test!roundtrip-u8" />
-                <WasmImport Include="test:numbers/test!roundtrip-s8" />
-                <WasmImport Include="test:numbers/test!roundtrip-u16" />
-                <WasmImport Include="test:numbers/test!roundtrip-s16" />
-                <WasmImport Include="test:numbers/test!roundtrip-u32" />
-                <WasmImport Include="test:numbers/test!roundtrip-s32" />
-                <WasmImport Include="test:numbers/test!roundtrip-u64" />
-                <WasmImport Include="test:numbers/test!roundtrip-s64" />
-                <WasmImport Include="test:numbers/test!roundtrip-float32" />
-                <WasmImport Include="test:numbers/test!roundtrip-float64" />
-                <WasmImport Include="test:numbers/test!roundtrip-char" />
-                <WasmImport Include="test:numbers/test!set-scalar" />
-                <WasmImport Include="test:numbers/test!get-scalar" />
-            </ItemGroup>
+    <ItemGroup>
+        <WasmImport Include="test:numbers/test!roundtrip-u8" />
+        <WasmImport Include="test:numbers/test!roundtrip-s8" />
+        <WasmImport Include="test:numbers/test!roundtrip-u16" />
+        <WasmImport Include="test:numbers/test!roundtrip-s16" />
+        <WasmImport Include="test:numbers/test!roundtrip-u32" />
+        <WasmImport Include="test:numbers/test!roundtrip-s32" />
+        <WasmImport Include="test:numbers/test!roundtrip-u64" />
+        <WasmImport Include="test:numbers/test!roundtrip-s64" />
+        <WasmImport Include="test:numbers/test!roundtrip-float32" />
+        <WasmImport Include="test:numbers/test!roundtrip-float64" />
+        <WasmImport Include="test:numbers/test!roundtrip-char" />
+        <WasmImport Include="test:numbers/test!set-scalar" />
+        <WasmImport Include="test:numbers/test!get-scalar" />
+    </ItemGroup>
             "#,
         );
 
         //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <CustomLinkerArg Include="-Wl,--export,_initialize" />
-                <CustomLinkerArg Include="-Wl,--no-entry" />
-                <CustomLinkerArg Include="-mexec-model=reactor" />
-        
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
-            </ItemGroup>
+    <ItemGroup>
+        <CustomLinkerArg Include="-Wl,--export,_initialize" />
+        <CustomLinkerArg Include="-Wl,--no-entry" />
+        <CustomLinkerArg Include="-mexec-model=reactor" />
+    
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
+    </ItemGroup>
             "#,
         );
 
         csproj.push_str(
             r#"
-                <ItemGroup>
-                    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
-                    <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
-                </ItemGroup>
-            </Project>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+        <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+    </ItemGroup>
+</Project>
             "#,
         );
 
