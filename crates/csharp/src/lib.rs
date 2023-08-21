@@ -1,7 +1,7 @@
 mod component_type_object;
 
+use anyhow::Result;
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
-use wit_component::StringEncoding;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
@@ -14,11 +14,11 @@ use wit_bindgen_core::{
         abi::{AbiVariant, Bindgen, Instruction, LiftLower, WasmType},
         Case, Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
         Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Union,
-        Variant, WorldId, WorldKey
+        Variant, WorldId, WorldKey,
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
-use anyhow::Result;
+use wit_component::StringEncoding;
 
 //cargo run c-sharp --out-dir testing-csharp tests/codegen/floats.wit
 
@@ -61,7 +61,7 @@ struct InterfaceFragment {
 }
 
 pub struct InterfaceTypeAndFragments {
-    is_export : bool,
+    is_export: bool,
     interface_fragments: Vec<InterfaceFragment>,
 }
 
@@ -69,7 +69,7 @@ impl InterfaceTypeAndFragments {
     pub fn new(is_export: bool) -> Self {
         InterfaceTypeAndFragments {
             is_export: is_export,
-            interface_fragments : Vec::<InterfaceFragment>::new()
+            interface_fragments: Vec::<InterfaceFragment>::new(),
         }
     }
 }
@@ -106,12 +106,12 @@ impl CSharp {
     }
 
     fn get_class_name_from_qualified_name(qualified_type: String) -> String {
-            let parts: Vec<&str> = qualified_type.split('.').collect();
-            if let Some(last_part) = parts.last() {
-                last_part.to_string()
-            } else {
-                String::new()
-            }
+        let parts: Vec<&str> = qualified_type.split('.').collect();
+        if let Some(last_part) = parts.last() {
+            last_part.to_string()
+        } else {
+            String::new()
+        }
     }
 }
 
@@ -184,7 +184,7 @@ impl WorldGenerator for CSharp {
         world: WorldId,
         funcs: &[(&str, &Function)],
         _files: &mut Files,
-    )-> Result<()> {
+    ) -> Result<()> {
         let name = &format!("{}-world", resolve.worlds[world].name);
         let mut gen = self.interface(resolve, name);
 
@@ -229,7 +229,7 @@ impl WorldGenerator for CSharp {
 
              {CSHARP_IMPORTS}
 
-             public static class {name}World {{
+             public interface {name}World {{
             "
         );
 
@@ -315,7 +315,6 @@ impl WorldGenerator for CSharp {
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
 
         let generate_stub = |name: String, files: &mut Files| {
-
             let stub_file_name = format!("{name}Impl");
             let interface_name = CSharp::get_class_name_from_qualified_name(name.clone());
             let stub_class_name = format!("{interface_name}Impl");
@@ -346,7 +345,6 @@ impl WorldGenerator for CSharp {
         // }
 
         for (name, interface_type_and_fragments) in &self.interface_fragments {
-
             let fragments = &interface_type_and_fragments.interface_fragments;
 
             let interface_name = CSharp::get_class_name_from_qualified_name(name.to_string());
@@ -499,8 +497,6 @@ impl InterfaceGenerator<'_> {
 
             "#
         );
-
-
     }
 
     fn export(&mut self, func: &Function, interface_name: Option<&WorldKey>) {
@@ -523,15 +519,26 @@ impl InterfaceGenerator<'_> {
 
         let src = bindgen.src;
 
-        let result_type = match &sig.results[..] {
+        let wasm_result_type = match &sig.results[..] {
             [] => "void",
             [result] => wasm_type(*result),
             _ => unreachable!(),
         };
 
+        let result_type = match func.results.len() {
+            0 => "void".to_owned(),
+            1 => self.type_name(func.results.iter_types().next().unwrap()),
+            _ => func
+                .results
+                .iter_types()
+                .map(|ty| self.type_name(ty))
+                .collect::<Vec<String>>()
+                .join(", "),
+        };
+
         let camel_name = func.name.to_upper_camel_case();
 
-        let params = sig
+        let wasm_params = sig
             .params
             .iter()
             .enumerate()
@@ -542,6 +549,17 @@ impl InterfaceGenerator<'_> {
             .collect::<Vec<_>>()
             .join(", ");
 
+        let params = func
+            .params
+            .iter()
+            .map(|(name, ty)| {
+                let ty = self.type_name(ty);
+
+                format!("{ty} {name}")
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
         let interop_name = format!("wasmExport{camel_name}");
         let core_module_name = interface_name.map(|s| self.resolve.name_world_key(s));
         let export_name = func.core_export_name(core_module_name.as_deref());
@@ -550,7 +568,7 @@ impl InterfaceGenerator<'_> {
             self.csharp_interop_src,
             r#"
             [UnmanagedCallersOnly(EntryPoint = "{export_name}")]
-            internal static {result_type} {interop_name}({params}) {{
+            internal static {wasm_result_type} {interop_name}({wasm_params}) {{
                 {src}
             }}
             "#
@@ -1038,8 +1056,9 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
         }
     }
 
-    fn type_resource(&mut self, _id: TypeId, _name: &str, _docs: &Docs) { todo!() }
-
+    fn type_resource(&mut self, _id: TypeId, _name: &str, _docs: &Docs) {
+        todo!()
+    }
 }
 
 struct Block {
@@ -1281,12 +1300,49 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                 let func_name = self.func_name.to_upper_camel_case();
                 let class_name = CSharp::get_class_name_from_qualified_name(module);
 
-                let operands = operands.join(", ");
-                if func.results.len() > 0 {
-                    //uwriteln!(self.src, "{name}.{func_name}({operands});");
-                    results.push(format!("{class_name}Impl.{func_name}({operands})"));
-                } else {
-                    uwriteln!(self.src, "{class_name}Impl.{func_name}({operands});");
+                let sig = self
+                    .gen
+                    .resolve()
+                    .wasm_signature(AbiVariant::GuestExport, func);
+
+                let wasm_cast = sig
+                    .results
+                    .iter()
+                    .map(|param| {
+                        let ty = wasm_type(*param);
+                        format!("({ty})")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let params_cast = func
+                    .params
+                    .iter()
+                    .map(|(_, ty)| {
+                        let ty = self.gen.type_name(ty);
+
+                        format!("{ty}")
+                    })
+                    .collect::<Vec<String>>();
+
+                let mut oper = String::new();
+
+                for (i, param) in operands.iter().enumerate() {
+                    let cast = params_cast.get(i).unwrap();
+                    oper.push_str(&format!("({cast}){param}"));
+
+                    if i < operands.len() && operands.len() != i + 1 {
+                        oper.push_str(", ");
+                    }
+                }
+
+                //TODO: Fix this to actually rely on results correctly
+                match func.results.len() {
+                    0 => self
+                        .src
+                        .push_str(&format!("{class_name}Impl.{func_name}({oper});")),
+                    1 => results.push(format!("{wasm_cast}{class_name}Impl.{func_name}({oper})")),
+                    _ => results.push(format!("({wasm_cast}){class_name}Impl.{func_name}({oper})")),
                 }
             }
 
@@ -1308,8 +1364,16 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::GuestDeallocateVariant { .. } => todo!("GuestDeallocateString"),
 
             Instruction::GuestDeallocateList { .. } => todo!("GuestDeallocateList"),
-            Instruction::HandleLower { handle: _, name: _, ty: _ } => todo!(),
-            Instruction::HandleLift { handle: _, name: _, ty: _dir } => todo!("HandleLeft"),
+            Instruction::HandleLower {
+                handle: _,
+                name: _,
+                ty: _,
+            } => todo!(),
+            Instruction::HandleLift {
+                handle: _,
+                name: _,
+                ty: _dir,
+            } => todo!("HandleLeft"),
         }
     }
 

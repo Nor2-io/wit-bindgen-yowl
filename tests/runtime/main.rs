@@ -457,7 +457,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     }
 
     #[cfg(feature = "csharp")]
-    for path in c.iter() {
+    for path in c_sharp.iter() {
         let world_name = &resolve.worlds[world].name;
         let out_dir = out_dir.join(format!("csharp-{}", world_name));
         drop(fs::remove_dir_all(&out_dir));
@@ -469,8 +469,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             "csharp-{}",
             path.file_stem().and_then(|s| s.to_str()).unwrap()
         );
-
-        dbg!(&assembly_name);
 
         let out_wasm = out_dir.join(&assembly_name);
 
@@ -531,18 +529,19 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
               <PublishTrimmed>true</PublishTrimmed>
               <AssemblyName>{assembly_name}</AssemblyName>
           </PropertyGroup>
-          <ItemGroup>
           "
         );
+
+        //csproj.push_str("<ItemGroup>\n");
 
         for (file, contents) in files.iter() {
             let dst = out_dir.join(file);
             fs::write(dst, contents).unwrap();
 
-            csproj.push_str(&format!("<Compile Include=\"{file}\" Link=\"{file}\"/>\n"));
+            //csproj.push_str(&format!("<Compile Include=\"{file}\" Link=\"{file}\"/>\n"));
         }
 
-        csproj.push_str("</ItemGroup>\n\n");
+        //csproj.push_str("</ItemGroup>\n\n");
         csproj.push_str(
             r#"
             <ItemGroup>
@@ -645,6 +644,10 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         let camel = snake.to_upper_camel_case();
 
         fs::write(out_dir.join(format!("{camel}.csproj")), csproj)?;
+
+        // Copy test file to target location to be included in compilation
+        let file_name = path.file_name().unwrap();
+        fs::copy(path, out_dir.join(file_name.to_str().unwrap()))?;
 
         let mut cmd = Command::new("dotnet");
 
