@@ -1,14 +1,12 @@
 use anyhow::Result;
 use heck::ToUpperCamelCase;
-use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use wasm_encoder::{Encode, Section};
 use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
-use wit_component::{ComponentEncoder, StringEncoding};
+use wit_component::ComponentEncoder;
 use wit_parser::Resolve;
 
 mod flavorful;
@@ -548,7 +546,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     <ItemGroup>
         <RdXmlFile Include="rd.xml" />
     </ItemGroup>
-    
+
 "#,
         );
 
