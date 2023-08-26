@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace wit_numbers;
 
 using wit_numbers.Wit.exports.test.numbers.Test;
@@ -5,8 +7,16 @@ using wit_numbers.Wit.exports.test.numbers.Test;
 using System;
 using System.Diagnostics;
 
+
 public class NumbersImpl : NumbersWorld
 {
+    //TODO move to generated code
+    [UnmanagedCallersOnly(EntryPoint = "test-imports")]
+    public static void TestImportsExport()
+    {
+        TestImports();
+    }
+
     public static void TestImports()
     {
         Debug.Assert(TestImpl.RoundtripU8(1) == 1);
