@@ -62,9 +62,9 @@ public class NumbersImpl : NumbersWorld
     }
 }
 
-public class TestImpl : Test
+public class TestImpl : ITest
 {
-    static int SCALAR = 0;
+    static uint SCALAR = 0;
 
     public static byte RoundtripU8(byte p0)
     {

@@ -681,7 +681,10 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         }
 
         // Translate the canonical ABI module into a component.
-        let module = fs::read(&out_wasm).expect("failed to read wasm file");
+        let mut wasm_filename = out_wasm.join(assembly_name);
+        wasm_filename.set_extension("wasm");
+        println!("{:?}", &wasm_filename);
+        let module = fs::read(&wasm_filename).expect("failed to read wasm file");
         let component = ComponentEncoder::default()
             .module(module.as_slice())
             .expect("pull custom sections from module")
