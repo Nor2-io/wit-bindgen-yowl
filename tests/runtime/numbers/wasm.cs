@@ -66,27 +66,27 @@ public class TestImpl : Test
 {
     static int SCALAR = 0;
 
-    public static int RoundtripU8(int p0)
+    public static byte RoundtripU8(byte p0)
     {
         return p0;
     }
 
-    public static int RoundtripS8(int p0)
+    public static sbyte RoundtripS8(sbyte p0)
     {
         return p0;
     }
 
-    public static int RoundtripU16(int p0)
+    public static ushort RoundtripU16(ushort p0)
     {
         return p0;
     }
 
-    public static int RoundtripS16(int p0)
+    public static short RoundtripS16(short p0)
     {
         return p0;
     }
 
-    public static int RoundtripU32(uint p0)
+    public static uint RoundtripU32(uint p0)
     {
         return p0;
     }
@@ -116,17 +116,17 @@ public class TestImpl : Test
         return p0;
     }
 
-    public static char RoundtripChar(char p0)
+    public static uint RoundtripChar(uint p0)
     {
         return p0;
     }
 
-    public static void SetScalar(int p0)
+    public static void SetScalar(uint p0)
     {
         SCALAR = p0;
     }
 
-    public static int GetScalar()
+    public static uint GetScalar()
     {
         return SCALAR;
     }

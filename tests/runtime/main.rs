@@ -4,10 +4,9 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use wasm_encoder::{Encode, Section};
 use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
-use wit_component::{ComponentEncoder, StringEncoding};
+use wit_component::ComponentEncoder;
 use wit_parser::Resolve;
 
 mod flavorful;
@@ -456,7 +455,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     }
 
     #[cfg(feature = "csharp")]
-    for path in c.iter() {
+    for path in c_sharp.iter() {
         let world_name = &resolve.worlds[world].name;
         let out_dir = out_dir.join(format!("csharp-{}", world_name));
         drop(fs::remove_dir_all(&out_dir));
@@ -472,8 +471,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             "csharp-{}",
             path.file_stem().and_then(|s| s.to_str()).unwrap()
         );
-
-        dbg!(&assembly_name);
 
         let out_wasm = out_dir.join(&assembly_name);
 
@@ -524,93 +521,96 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         let mut csproj = format!(
             "<Project Sdk=\"Microsoft.NET.Sdk\">
 
-        <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
-          <RootNamespace>{assembly_name}</RootNamespace>
-          <ImplicitUsings>enable</ImplicitUsings>
-          <Nullable>enable</Nullable>
-        </PropertyGroup>
-          <PropertyGroup>
-              <PublishTrimmed>true</PublishTrimmed>
-              <AssemblyName>{assembly_name}</AssemblyName>
-          </PropertyGroup>
-          <ItemGroup>
-          "
+    <PropertyGroup>
+      <TargetFramework>net8.0</TargetFramework>
+      <RootNamespace>{assembly_name}</RootNamespace>
+      <ImplicitUsings>enable</ImplicitUsings>
+      <Nullable>enable</Nullable>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <PublishTrimmed>true</PublishTrimmed>
+        <AssemblyName>{assembly_name}</AssemblyName>
+    </PropertyGroup>
+    "
         );
+
+        //csproj.push_str("<ItemGroup>\n");
 
         for (file, contents) in files.iter() {
             let dst = out_dir.join(file);
             fs::write(dst, contents).unwrap();
         }
 
-        csproj.push_str("</ItemGroup>\n\n");
+        //csproj.push_str("</ItemGroup>\n\n");
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <RdXmlFile Include="rd.xml" />
-            </ItemGroup>
-            "#,
+    <ItemGroup>
+        <RdXmlFile Include="rd.xml" />
+    </ItemGroup>
+
+"#,
         );
 
-        csproj.push_str("<ItemGroup>\n");
+        csproj.push_str("\t<ItemGroup>\n");
         csproj.push_str(&format!(
-            "<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
+            "\t\t<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
         ));
-        csproj.push_str("</ItemGroup>\n\n");
+        csproj.push_str("\t</ItemGroup>\n\n");
 
         //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <WasmImport Include="test:numbers/test!roundtrip-u8" />
-                <WasmImport Include="test:numbers/test!roundtrip-s8" />
-                <WasmImport Include="test:numbers/test!roundtrip-u16" />
-                <WasmImport Include="test:numbers/test!roundtrip-s16" />
-                <WasmImport Include="test:numbers/test!roundtrip-u32" />
-                <WasmImport Include="test:numbers/test!roundtrip-s32" />
-                <WasmImport Include="test:numbers/test!roundtrip-u64" />
-                <WasmImport Include="test:numbers/test!roundtrip-s64" />
-                <WasmImport Include="test:numbers/test!roundtrip-float32" />
-                <WasmImport Include="test:numbers/test!roundtrip-float64" />
-                <WasmImport Include="test:numbers/test!roundtrip-char" />
-                <WasmImport Include="test:numbers/test!set-scalar" />
-                <WasmImport Include="test:numbers/test!get-scalar" />
-            </ItemGroup>
+    <ItemGroup>
+        <WasmImport Include="test:numbers/test!roundtrip-u8" />
+        <WasmImport Include="test:numbers/test!roundtrip-s8" />
+        <WasmImport Include="test:numbers/test!roundtrip-u16" />
+        <WasmImport Include="test:numbers/test!roundtrip-s16" />
+        <WasmImport Include="test:numbers/test!roundtrip-u32" />
+        <WasmImport Include="test:numbers/test!roundtrip-s32" />
+        <WasmImport Include="test:numbers/test!roundtrip-u64" />
+        <WasmImport Include="test:numbers/test!roundtrip-s64" />
+        <WasmImport Include="test:numbers/test!roundtrip-float32" />
+        <WasmImport Include="test:numbers/test!roundtrip-float64" />
+        <WasmImport Include="test:numbers/test!roundtrip-char" />
+        <WasmImport Include="test:numbers/test!set-scalar" />
+        <WasmImport Include="test:numbers/test!get-scalar" />
+    </ItemGroup>
             "#,
         );
 
         //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
         csproj.push_str(
             r#"
-            <ItemGroup>
-                <CustomLinkerArg Include="-Wl,--export,_initialize" />
-                <CustomLinkerArg Include="-Wl,--no-entry" />
-                <CustomLinkerArg Include="-mexec-model=reactor" />
-        
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
-                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
-            </ItemGroup>
+    <ItemGroup>
+        <CustomLinkerArg Include="-Wl,--export,_initialize" />
+        <CustomLinkerArg Include="-Wl,--no-entry" />
+        <CustomLinkerArg Include="-mexec-model=reactor" />
+    
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
+        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
+    </ItemGroup>
             "#,
         );
 
         csproj.push_str(
             r#"
-                <ItemGroup>
-                    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
-                    <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
-                </ItemGroup>
-            </Project>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+        <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="8.0.0-*" />
+    </ItemGroup>
+</Project>
             "#,
         );
 
@@ -646,6 +646,10 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         let camel = snake.to_upper_camel_case();
 
         fs::write(out_dir.join(format!("{camel}.csproj")), csproj)?;
+
+        // Copy test file to target location to be included in compilation
+        let file_name = path.file_name().unwrap();
+        fs::copy(path, out_dir.join(file_name.to_str().unwrap()))?;
 
         let mut cmd = Command::new("dotnet");
 
