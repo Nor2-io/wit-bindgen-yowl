@@ -5,9 +5,9 @@ using wit_numbers.Wit.exports.test.numbers.Test;
 using System;
 using System.Diagnostics;
 
-public static class NumbersImpl : NumbersWorld
+public class NumbersImpl : NumbersWorld
 {
-    static void TestImports()
+    public static void TestImports()
     {
         Debug.Assert(TestImpl.RoundtripU8(1) == 1);
         Debug.Assert(TestImpl.RoundtripU8(0) == 0);
@@ -41,7 +41,7 @@ public static class NumbersImpl : NumbersWorld
         Debug.Assert(TestImpl.RoundtripS64(Int64.MinValue) == Int64.MinValue);
         Debug.Assert(TestImpl.RoundtripS64(Int64.MaxValue) == Int64.MaxValue);
 
-        Debug.Assert(TestImpl.RoundtripFloat32(1.0) == 1.0);
+        Debug.Assert(TestImpl.RoundtripFloat32(1.0f) == 1.0f);
         Debug.Assert(TestImpl.RoundtripFloat32(Single.PositiveInfinity) == Single.PositiveInfinity);
         Debug.Assert(TestImpl.RoundtripFloat32(Single.NegativeInfinity) == Single.NegativeInfinity);
         Debug.Assert(TestImpl.RoundtripFloat32(Single.NaN) == Single.NaN);
@@ -51,9 +51,9 @@ public static class NumbersImpl : NumbersWorld
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NegativeInfinity) == Double.NegativeInfinity);
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NaN) == Double.NaN);
 
-        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32('a')) == Char.ConvertToUtf32('a'));
-        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32(' ')) == Char.ConvertToUtf32(' '));
-        Debug.Assert(TestImpl.RoundtripChar(Char.ConvertToUtf32("🚩"u8)) == Char.ConvertToUtf32("🚩"u8));
+        Debug.Assert(TestImpl.RoundtripChar('a') == 'a');
+        Debug.Assert(TestImpl.RoundtripChar(' ') == ' ');
+        Debug.Assert(TestImpl.RoundtripChar("🚩"[0]) == "🚩"[0]);
 
         TestImpl.SetScalar(2);
         Debug.Assert(TestImpl.GetScalar() == 2);
@@ -62,71 +62,71 @@ public static class NumbersImpl : NumbersWorld
     }
 }
 
-public static class TestImpl : Test
+public class TestImpl : Test
 {
-    static uint SCALAR = 0;
+    static int SCALAR = 0;
 
-    static int RoundtripU8(int p0)
+    public static int RoundtripU8(int p0)
     {
         return p0;
     }
 
-    static int RoundtripS8(int p0)
+    public static int RoundtripS8(int p0)
     {
         return p0;
     }
 
-    static int RoundtripU16(int p0)
+    public static int RoundtripU16(int p0)
     {
         return p0;
     }
 
-    static int RoundtripS16(int p0)
+    public static int RoundtripS16(int p0)
     {
         return p0;
     }
 
-    static int RoundtripU32(int p0)
+    public static int RoundtripU32(uint p0)
     {
         return p0;
     }
 
-    static int RoundtripS32(int p0)
+    public static int RoundtripS32(int p0)
     {
         return p0;
     }
 
-    static long RoundtripU64(long p0)
+    public static ulong RoundtripU64(ulong p0)
     {
         return p0;
     }
 
-    static long RoundtripS64(long p0)
+    public static long RoundtripS64(long p0)
     {
         return p0;
     }
 
-    static float RoundtripFloat32(float p0)
+    public static float RoundtripFloat32(float p0)
     {
         return p0;
     }
 
-    static double RoundtripFloat64(double p0)
+    public static double RoundtripFloat64(double p0)
     {
         return p0;
     }
 
-    static int RoundtripChar(int p0)
+    public static char RoundtripChar(char p0)
     {
         return p0;
     }
 
-    static void SetScalar(int p0)
+    public static void SetScalar(int p0)
     {
-        return SCALAR = p0;
+        SCALAR = p0;
     }
 
-    static int GetScalar()
+    public static int GetScalar()
     {
         return SCALAR;
     }

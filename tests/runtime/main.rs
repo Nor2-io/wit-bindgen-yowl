@@ -1,6 +1,5 @@
 use anyhow::Result;
 use heck::ToUpperCamelCase;
-use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -463,6 +462,10 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         drop(fs::remove_dir_all(&out_dir));
         fs::create_dir_all(&out_dir).unwrap();
 
+        for csharp_impl in &c_sharp {
+            fs::copy(&csharp_impl, &out_dir.join(csharp_impl.file_name().unwrap())).unwrap();
+        }
+
         let snake = world_name.replace("-", "_");
 
         let assembly_name = format!(
@@ -538,8 +541,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         for (file, contents) in files.iter() {
             let dst = out_dir.join(file);
             fs::write(dst, contents).unwrap();
-
-            csproj.push_str(&format!("<Compile Include=\"{file}\" Link=\"{file}\"/>\n"));
         }
 
         csproj.push_str("</ItemGroup>\n\n");

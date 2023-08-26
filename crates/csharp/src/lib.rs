@@ -229,7 +229,7 @@ impl WorldGenerator for CSharp {
 
              {CSHARP_IMPORTS}
 
-             public static class {name}World {{
+             public interface {name}World {{
             "
         );
 
@@ -349,7 +349,7 @@ impl WorldGenerator for CSharp {
 
             let fragments = &interface_type_and_fragments.interface_fragments;
 
-            let interface_name = CSharp::get_class_name_from_qualified_name(name.to_string());
+            let interface_name = "I".to_string() + &CSharp::get_class_name_from_qualified_name(name.to_string());
 
             // C#
             let body = fragments
