@@ -117,7 +117,8 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     out_dir.push(name);
 
     println!("wasi adapter = {:?}", test_artifacts::ADAPTER);
-    let wasi_adapter = std::fs::read(&test_artifacts::ADAPTER)?;
+    let wasi_adapter = std::fs::read("C:\\Users\\scott\\Downloads\\wasi_snapshot_preview1.command.wasm")?;
+    // let wasi_adapter = std::fs::read(&test_artifacts::ADAPTER)?;
 
     drop(std::fs::remove_dir_all(&out_dir));
     std::fs::create_dir_all(&out_dir)?;
@@ -583,8 +584,8 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             r#"
     <ItemGroup>
         <CustomLinkerArg Include="-Wl,--export,_initialize" />
-        <CustomLinkerArg Include="-Wl,--no-entry" />
-        <CustomLinkerArg Include="-mexec-model=reactor" />
+        <CustomLinkerArg Include="-Wl,--export,_start" />
+        <CustomLinkerArg Include="-mexec-model=command" />
     
         <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
         <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />

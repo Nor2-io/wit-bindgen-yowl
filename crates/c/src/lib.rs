@@ -1698,7 +1698,7 @@ impl InterfaceGenerator<'_> {
         let name = self.c_func_name(interface_name, func);
         let import_name = self.gen.names.tmp(&format!("__wasm_export_{name}"));
 
-        let mut f = FunctionBindgen::new(self, h_sig, &import_name);
+        let mut f: FunctionBindgen<'_, '_> = FunctionBindgen::new(self, h_sig, &import_name);
         match sig.results.len() {
             0 => f.gen.src.c_adapters("void"),
             1 => f.gen.src.c_adapters(wasm_type(sig.results[0])),

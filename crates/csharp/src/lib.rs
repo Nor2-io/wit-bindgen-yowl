@@ -8,12 +8,12 @@ use std::{
     iter, mem,
     ops::Deref,
 };
+use wit_bindgen_core::abi::{self, AbiVariant, Bindgen, Instruction, LiftLower, WasmType};
 use wit_bindgen_core::{
     uwrite, uwriteln,
     wit_parser::{
-        abi::{AbiVariant, Bindgen, Instruction, LiftLower, WasmType},
-        Case, Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
-        Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Union,
+        Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
+        Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
         Variant, WorldId, WorldKey,
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
@@ -461,7 +461,8 @@ impl InterfaceGenerator<'_> {
                 .collect(),
         );
 
-        bindgen.gen.resolve.call(
+        abi::call(
+            bindgen.gen.resolve,
             AbiVariant::GuestImport,
             LiftLower::LowerArgsLiftResults,
             func,
@@ -512,7 +513,8 @@ impl InterfaceGenerator<'_> {
             (0..sig.params.len()).map(|i| format!("p{i}")).collect(),
         );
 
-        bindgen.gen.resolve.call(
+        abi::call(
+            bindgen.gen.resolve,
             AbiVariant::GuestExport,
             LiftLower::LiftArgsLowerResults,
             func,
@@ -985,26 +987,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
         self.type_name(&Type::Id(id));
     }
 
-    fn type_union(&mut self, id: TypeId, name: &str, union: &Union, docs: &Docs) {
-        self.type_variant(
-            id,
-            name,
-            &Variant {
-                cases: union
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .map(|(i, case)| Case {
-                        docs: case.docs.clone(),
-                        name: format!("f{i}"),
-                        ty: Some(case.ty),
-                    })
-                    .collect(),
-            },
-            docs,
-        )
-    }
-
     fn type_enum(&mut self, _id: TypeId, name: &str, enum_: &Enum, docs: &Docs) {
         self.print_docs(docs);
 
@@ -1049,7 +1031,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
             TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
             TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
             TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
-            TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
             TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
             TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
             TypeDefKind::Future(_) => todo!("generate for future"),
@@ -1220,10 +1201,6 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::VariantLower { .. } => todo!("VariantLift"),
 
             Instruction::VariantLift { .. } => todo!("VariantLift"),
-
-            Instruction::UnionLower { .. } => todo!("UnionLower"),
-
-            Instruction::UnionLift { .. } => todo!("UnionLift"),
 
             Instruction::OptionLower { .. } => todo!("OptionLower"),
 
