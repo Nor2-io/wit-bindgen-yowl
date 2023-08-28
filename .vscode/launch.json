@@ -736,10 +736,10 @@
                     "--no-run",
                     "chsarp",
                     "--",
+                    "numbers",
                     "--F csharp",
                     "-p",
                     "wit-bindgen-cli",
-                    "--numbers"
                 ],
                 "filter": {
                     "name": "runtime",
