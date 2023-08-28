@@ -117,8 +117,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     out_dir.push(name);
 
     println!("wasi adapter = {:?}", test_artifacts::ADAPTER);
-    let wasi_adapter = std::fs::read("C:\\Users\\scott\\Downloads\\wasi_snapshot_preview1.command.wasm")?;
-    // let wasi_adapter = std::fs::read(&test_artifacts::ADAPTER)?;
+    let wasi_adapter = std::fs::read(&test_artifacts::ADAPTER)?;
 
     drop(std::fs::remove_dir_all(&out_dir));
     std::fs::create_dir_all(&out_dir)?;
