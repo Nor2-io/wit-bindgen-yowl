@@ -1,9 +1,7 @@
 use heck::*;
-use std::collections::HashMap;
-use std::fmt::{self, Write};
-use std::iter::zip;
+use std::fmt;
 use std::str::FromStr;
-use wit_bindgen_core::wit_parser::abi::{Bitcast, LiftLower, WasmType};
+use wit_bindgen_core::abi::{Bitcast, LiftLower, WasmType};
 use wit_bindgen_core::{wit_parser::*, TypeInfo, Types};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -348,8 +346,7 @@ pub trait RustGenerator<'a> {
                     | TypeDefKind::List(_)
                     | TypeDefKind::Flags(_)
                     | TypeDefKind::Enum(_)
-                    | TypeDefKind::Tuple(_)
-                    | TypeDefKind::Union(_) => true,
+                    | TypeDefKind::Tuple(_) => true,
                     TypeDefKind::Type(Type::Id(t)) => {
                         needs_generics(resolve, &resolve.types[*t].kind)
                     }
@@ -403,9 +400,6 @@ pub trait RustGenerator<'a> {
             TypeDefKind::Enum(_) => {
                 panic!("unsupported anonymous type reference: enum")
             }
-            TypeDefKind::Union(_) => {
-                panic!("unsupported anonymous type reference: union")
-            }
             TypeDefKind::Future(ty) => {
                 self.push_str("Future<");
                 self.print_optional_ty(ty.as_ref(), mode);
@@ -436,17 +430,16 @@ pub trait RustGenerator<'a> {
                     }
                 }
                 if self.is_exported_resource(*ty) {
-                    self.push_str(&self.type_path_with_name(
-                        *ty,
-                        format!(
-                        "Rep{}",
-                        self.resolve().types[*ty]
-                            .name
-                            .as_deref()
-                            .unwrap()
-                            .to_upper_camel_case()
-                    ),
-                    ));
+                    self.push_str(
+                        &self.type_path_with_name(
+                            *ty,
+                            self.resolve().types[*ty]
+                                .name
+                                .as_deref()
+                                .unwrap()
+                                .to_upper_camel_case(),
+                        ),
+                    );
                 } else {
                     self.print_ty(&Type::Id(*ty), mode);
                 }
@@ -547,126 +540,6 @@ pub trait RustGenerator<'a> {
             result.push((self.param_name(ty), TypeMode::AllBorrowed("'a")));
         }
         return result;
-    }
-
-    /// Writes the camel-cased 'name' of the passed type to `out`, as used to name union variants.
-    fn write_name(&self, ty: &Type, out: &mut String) {
-        match ty {
-            Type::Bool => out.push_str("Bool"),
-            Type::U8 => out.push_str("U8"),
-            Type::U16 => out.push_str("U16"),
-            Type::U32 => out.push_str("U32"),
-            Type::U64 => out.push_str("U64"),
-            Type::S8 => out.push_str("I8"),
-            Type::S16 => out.push_str("I16"),
-            Type::S32 => out.push_str("I32"),
-            Type::S64 => out.push_str("I64"),
-            Type::Float32 => out.push_str("F32"),
-            Type::Float64 => out.push_str("F64"),
-            Type::Char => out.push_str("Char"),
-            Type::String => out.push_str("String"),
-            Type::Id(id) => {
-                let ty = &self.resolve().types[*id];
-                match &ty.name {
-                    Some(name) => out.push_str(&name.to_upper_camel_case()),
-                    None => match &ty.kind {
-                        TypeDefKind::Option(ty) => {
-                            out.push_str("Optional");
-                            self.write_name(ty, out);
-                        }
-                        TypeDefKind::Result(_) => out.push_str("Result"),
-                        TypeDefKind::Tuple(_) => out.push_str("Tuple"),
-                        TypeDefKind::List(ty) => {
-                            self.write_name(ty, out);
-                            out.push_str("List")
-                        }
-                        TypeDefKind::Future(ty) => {
-                            self.write_optional_name(ty.as_ref(), out);
-                            out.push_str("Future");
-                        }
-                        TypeDefKind::Stream(s) => {
-                            self.write_optional_name(s.element.as_ref(), out);
-                            self.write_optional_name(s.end.as_ref(), out);
-                            out.push_str("Stream");
-                        }
-
-                        TypeDefKind::Type(ty) => self.write_name(ty, out),
-                        TypeDefKind::Record(_) => out.push_str("Record"),
-                        TypeDefKind::Flags(_) => out.push_str("Flags"),
-                        TypeDefKind::Variant(_) => out.push_str("Variant"),
-                        TypeDefKind::Enum(_) => out.push_str("Enum"),
-                        TypeDefKind::Union(_) => out.push_str("Union"),
-                        TypeDefKind::Resource => out.push_str("Resource"),
-                        TypeDefKind::Handle(Handle::Own(ty)) => {
-                            out.push_str("Own");
-                            self.write_name(&Type::Id(*ty), out);
-                        }
-                        TypeDefKind::Handle(Handle::Borrow(ty)) => {
-                            out.push_str("Borrow");
-                            self.write_name(&Type::Id(*ty), out);
-                        }
-                        TypeDefKind::Unknown => unreachable!(),
-                    },
-                }
-            }
-        }
-    }
-
-    fn write_optional_name(&self, ty: Option<&Type>, out: &mut String) {
-        match ty {
-            Some(ty) => self.write_name(ty, out),
-            None => out.push_str("()"),
-        }
-    }
-
-    /// Returns the names for the cases of the passed union.
-    fn union_case_names(&self, union: &Union) -> Vec<String> {
-        enum UsedState<'a> {
-            /// This name has been used once before.
-            ///
-            /// Contains a reference to the name given to the first usage so that a suffix can be added to it.
-            Once(&'a mut String),
-            /// This name has already been used multiple times.
-            ///
-            /// Contains the number of times this has already been used.
-            Multiple(usize),
-        }
-
-        // A `Vec` of the names we're assigning each of the union's cases in order.
-        let mut case_names = vec![String::new(); union.cases.len()];
-        // A map from case names to their `UsedState`.
-        let mut used = HashMap::new();
-        for (case, name) in union.cases.iter().zip(case_names.iter_mut()) {
-            self.write_name(&case.ty, name);
-
-            match used.get_mut(name.as_str()) {
-                None => {
-                    // Initialise this name's `UsedState`, with a mutable reference to this name
-                    // in case we have to add a suffix to it later.
-                    used.insert(name.clone(), UsedState::Once(name));
-                    // Since this is the first (and potentially only) usage of this name,
-                    // we don't need to add a suffix here.
-                }
-                Some(state) => match state {
-                    UsedState::Multiple(n) => {
-                        // Add a suffix of the index of this usage.
-                        write!(name, "{n}").unwrap();
-                        // Add one to the number of times this type has been used.
-                        *n += 1;
-                    }
-                    UsedState::Once(first) => {
-                        // Add a suffix of 0 to the first usage.
-                        first.push('0');
-                        // We now get a suffix of 1.
-                        name.push('1');
-                        // Then update the state.
-                        *state = UsedState::Multiple(2);
-                    }
-                },
-            }
-        }
-
-        case_names
     }
 
     fn print_typedef_record(
@@ -802,28 +675,6 @@ pub trait RustGenerator<'a> {
         );
     }
 
-    fn print_typedef_union(
-        &mut self,
-        id: TypeId,
-        union: &Union,
-        docs: &Docs,
-        derive_component: bool,
-    ) where
-        Self: Sized,
-    {
-        self.print_rust_enum(
-            id,
-            zip(self.union_case_names(union), &union.cases)
-                .map(|(name, case)| (name, None, &case.docs, Some(&case.ty))),
-            docs,
-            if derive_component {
-                Some("union")
-            } else {
-                None
-            },
-        );
-    }
-
     fn print_rust_enum<'b>(
         &mut self,
         id: TypeId,
@@ -836,8 +687,6 @@ pub trait RustGenerator<'a> {
         let info = self.info(id);
 
         for (name, mode) in self.modes_of(id) {
-            let name = name.to_upper_camel_case();
-
             self.rustdoc(docs);
             let lt = self.lifetime_for(&info, mode);
             if let Some(derive_component) = derive_component {
@@ -995,7 +844,7 @@ pub trait RustGenerator<'a> {
     {
         let info = self.info(id);
 
-        let name = name.to_upper_camel_case();
+        let name = to_upper_camel_case(name);
         self.rustdoc(docs);
         for attr in attrs {
             self.push_str(&format!("{}\n", attr));
@@ -1003,7 +852,7 @@ pub trait RustGenerator<'a> {
         self.push_str("#[repr(");
         self.int_repr(enum_.tag());
         self.push_str(")]\n#[derive(Clone, Copy, PartialEq, Eq)]\n");
-        self.push_str(&format!("pub enum {} {{\n", name.to_upper_camel_case()));
+        self.push_str(&format!("pub enum {name} {{\n"));
         for case in enum_.cases.iter() {
             self.rustdoc(&case.docs);
             self.push_str(&case_attr(case));
@@ -1101,7 +950,7 @@ pub trait RustGenerator<'a> {
             // if only borrows are used, no need to generate the `Own{name}`
             // version.
             self.mark_resource_owned(target);
-            for prefix in ["Own", "Rep"] {
+            for prefix in ["Own", ""] {
                 self.rustdoc(docs);
                 self.push_str(&format!(
                     "pub type {prefix}{} = {};\n",
@@ -1148,11 +997,7 @@ pub trait RustGenerator<'a> {
 
     fn param_name(&self, ty: TypeId) -> String {
         let info = self.info(ty);
-        let name = self.resolve().types[ty]
-            .name
-            .as_ref()
-            .unwrap()
-            .to_upper_camel_case();
+        let name = to_upper_camel_case(self.resolve().types[ty].name.as_ref().unwrap());
         if self.uses_two_names(&info) {
             format!("{}Param", name)
         } else {
@@ -1162,11 +1007,7 @@ pub trait RustGenerator<'a> {
 
     fn result_name(&self, ty: TypeId) -> String {
         let info = self.info(ty);
-        let name = self.resolve().types[ty]
-            .name
-            .as_ref()
-            .unwrap()
-            .to_upper_camel_case();
+        let name = to_upper_camel_case(self.resolve().types[ty].name.as_ref().unwrap());
         if self.uses_two_names(&info) {
             format!("{}Result", name)
         } else if self.is_exported_resource(ty) {
@@ -1395,6 +1236,15 @@ pub fn to_rust_ident(name: &str) -> String {
         "yield" => "yield_".into(),
         "try" => "try_".into(),
         s => s.to_snake_case(),
+    }
+}
+
+pub fn to_upper_camel_case(name: &str) -> String {
+    match name {
+        // The name "Guest" is reserved for traits generated by exported
+        // interfaces, so remap types defined in wit to something else.
+        "guest" => "Guest_".to_string(),
+        s => s.to_upper_camel_case(),
     }
 }
 

@@ -5,9 +5,7 @@ use heck::*;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
-use wit_bindgen_core::wit_parser::abi::{
-    AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType,
-};
+use wit_bindgen_core::abi::{self, AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
 use wit_bindgen_core::{
     uwrite, uwriteln, wit_parser::*, Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
@@ -695,8 +693,7 @@ impl C {
             | TypeDefKind::Record(_)
             | TypeDefKind::Resource
             | TypeDefKind::Enum(_)
-            | TypeDefKind::Variant(_)
-            | TypeDefKind::Union(_) => {
+            | TypeDefKind::Variant(_) => {
                 unreachable!()
             }
             TypeDefKind::Handle(handle) => {
@@ -861,21 +858,6 @@ impl C {
                         self.src.c_helpers("break;\n");
                         self.src.c_helpers("}\n");
                     }
-                }
-                self.src.c_helpers("}\n");
-            }
-
-            TypeDefKind::Union(u) => {
-                self.src.c_helpers("switch ((int32_t) ptr->tag) {\n");
-                for (i, case) in u.cases.iter().enumerate() {
-                    if !owns_anything(resolve, &case.ty, &is_local_resource(self)) {
-                        continue;
-                    }
-                    uwriteln!(self.src.c_helpers, "case {i}: {{");
-                    let expr = format!("&ptr->val.f{i}");
-                    self.free(resolve, &case.ty, &expr);
-                    self.src.c_helpers("break;\n");
-                    self.src.c_helpers("}\n");
                 }
                 self.src.c_helpers("}\n");
             }
@@ -1097,8 +1079,7 @@ pub fn push_ty_name(
                 | TypeDefKind::Resource
                 | TypeDefKind::Flags(_)
                 | TypeDefKind::Enum(_)
-                | TypeDefKind::Variant(_)
-                | TypeDefKind::Union(_) => {
+                | TypeDefKind::Variant(_) => {
                     unimplemented!()
                 }
                 TypeDefKind::Tuple(t) => {
@@ -1309,8 +1290,7 @@ impl Return {
             TypeDefKind::Tuple(_)
             | TypeDefKind::Record(_)
             | TypeDefKind::List(_)
-            | TypeDefKind::Variant(_)
-            | TypeDefKind::Union(_) => {}
+            | TypeDefKind::Variant(_) => {}
 
             TypeDefKind::Future(_) => todo!("return_single for future"),
             TypeDefKind::Stream(_) => todo!("return_single for stream"),
@@ -1455,26 +1435,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
                 case.name.to_shouty_snake_case(),
             );
         }
-
-        self.finish_ty(id, prev);
-    }
-
-    fn type_union(&mut self, id: TypeId, name: &str, union: &Union, docs: &Docs) {
-        let prev = mem::take(&mut self.src.h_defs);
-        self.src.h_defs("\n");
-        self.docs(docs, SourceType::HDefs);
-        self.src.h_defs("typedef struct {\n");
-        self.src.h_defs(int_repr(union.tag()));
-        self.src.h_defs(" tag;\n");
-        self.src.h_defs("union {\n");
-        for (i, case) in union.cases.iter().enumerate() {
-            self.docs(&case.docs, SourceType::HDefs);
-            self.print_ty(SourceType::HDefs, &case.ty);
-            uwriteln!(self.src.h_defs, " f{i};");
-        }
-        self.src.h_defs("} val;\n");
-        self.src.h_defs("} ");
-        self.print_typedef_target(id, name);
 
         self.finish_ty(id, prev);
     }
@@ -1691,7 +1651,8 @@ impl InterfaceGenerator<'_> {
             f.locals.insert(ptr).unwrap();
         }
         f.src.push_str(&optional_adapters);
-        f.gen.resolve.call(
+        abi::call(
+            f.gen.resolve,
             AbiVariant::GuestImport,
             LiftLower::LowerArgsLiftResults,
             func,
@@ -1760,7 +1721,8 @@ impl InterfaceGenerator<'_> {
         f.gen.src.c_adapters(") {\n");
 
         // Perform all lifting/lowering and append it to our src.
-        f.gen.resolve.call(
+        abi::call(
+            f.gen.resolve,
             AbiVariant::GuestExport,
             LiftLower::LiftArgsLowerResults,
             func,
@@ -1770,7 +1732,7 @@ impl InterfaceGenerator<'_> {
         self.src.c_adapters(&src);
         self.src.c_adapters("}\n");
 
-        if self.resolve.guest_export_needs_post_return(func) {
+        if abi::guest_export_needs_post_return(self.resolve, func) {
             uwriteln!(
                 self.src.c_fns,
                 "__attribute__((__weak__, __export_name__(\"cabi_post_{export_name}\")))"
@@ -1795,7 +1757,7 @@ impl InterfaceGenerator<'_> {
 
             let mut f = FunctionBindgen::new(self, c_sig, &import_name);
             f.params = params;
-            f.gen.resolve.post_return(func, &mut f);
+            abi::post_return(f.gen.resolve, func, &mut f);
             let FunctionBindgen { src, .. } = f;
             self.src.c_fns(&src);
             self.src.c_fns("}\n");
@@ -2377,75 +2339,6 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                         dst.push_str(&to_c_ident(&case.name));
                         self.store_op(&block_results[0], &dst);
                     }
-                    self.src.push_str("break;\n}\n");
-                }
-                self.src.push_str("}\n");
-                results.push(result);
-            }
-
-            Instruction::UnionLower {
-                union,
-                results: result_types,
-                ..
-            } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-                let payloads = self
-                    .payloads
-                    .drain(self.payloads.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-
-                let mut union_results = Vec::with_capacity(result_types.len());
-                for ty in result_types.iter() {
-                    let name = self.locals.tmp("unionres");
-                    results.push(name.clone());
-                    let ty = wasm_type(*ty);
-                    uwriteln!(self.src, "{ty} {name};");
-                    union_results.push(name);
-                }
-
-                let op0 = &operands[0];
-                uwriteln!(self.src, "switch (({op0}).tag) {{");
-                for (i, ((case, (block, block_results)), payload)) in
-                    union.cases.iter().zip(blocks).zip(payloads).enumerate()
-                {
-                    uwriteln!(self.src, "case {i}: {{");
-                    if !is_empty_type(self.gen.resolve, &case.ty) {
-                        let ty = self.gen.type_string(&case.ty);
-                        uwriteln!(self.src, "const {ty} *{payload} = &({op0}).val.f{i};");
-                    }
-                    self.src.push_str(&block);
-
-                    for (name, result) in union_results.iter().zip(&block_results) {
-                        uwriteln!(self.src, "{name} = {result};");
-                    }
-                    self.src.push_str("break;\n}\n");
-                }
-                self.src.push_str("}\n");
-            }
-
-            Instruction::UnionLift { union, ty, .. } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-
-                let ty = self.gen.type_string(&Type::Id(*ty));
-                let result = self.locals.tmp("unionres");
-                uwriteln!(self.src, "{} {};", ty, result);
-                uwriteln!(self.src, "{}.tag = {};", result, operands[0]);
-                uwriteln!(self.src, "switch ((int32_t) {}.tag) {{", result);
-                for (i, (_case, (block, block_results))) in
-                    union.cases.iter().zip(blocks).enumerate()
-                {
-                    uwriteln!(self.src, "case {i}: {{");
-                    self.src.push_str(&block);
-
-                    assert!(block_results.len() == 1);
-                    let dst = format!("{result}.val.f{i}");
-                    self.store_op(&block_results[0], &dst);
                     self.src.push_str("break;\n}\n");
                 }
                 self.src.push_str("}\n");
@@ -3127,7 +3020,6 @@ pub fn is_arg_by_pointer(resolve: &Resolve, ty: &Type) -> bool {
         Type::Id(id) => match resolve.types[*id].kind {
             TypeDefKind::Type(t) => is_arg_by_pointer(resolve, &t),
             TypeDefKind::Variant(_) => true,
-            TypeDefKind::Union(_) => true,
             TypeDefKind::Option(_) => true,
             TypeDefKind::Result(_) => true,
             TypeDefKind::Enum(_) => false,
@@ -3197,10 +3089,6 @@ pub fn owns_anything(
             .cases
             .iter()
             .any(|c| optional_owns_anything(resolve, c.ty.as_ref(), is_local_resource)),
-        TypeDefKind::Union(v) => v
-            .cases
-            .iter()
-            .any(|case| owns_anything(resolve, &case.ty, is_local_resource)),
         TypeDefKind::Option(t) => owns_anything(resolve, t, is_local_resource),
         TypeDefKind::Result(r) => {
             optional_owns_anything(resolve, r.ok.as_ref(), is_local_resource)
@@ -3243,7 +3131,6 @@ pub fn to_c_ident(name: &str) -> String {
         "case" => "case_".into(),
         "extern" => "extern_".into(),
         "return" => "return_".into(),
-        "union" => "union_".into(),
         "char" => "char_".into(),
         "float" => "float_".into(),
         "short" => "short_".into(),

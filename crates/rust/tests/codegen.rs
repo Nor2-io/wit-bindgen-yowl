@@ -108,7 +108,7 @@ mod skip {
 
     struct Component;
 
-    impl exports::exports::Exports for Component {
+    impl exports::exports::Guest for Component {
         fn bar() {}
     }
 }
@@ -152,21 +152,21 @@ mod symbol_does_not_conflict {
 
     struct Component;
 
-    impl exports::my::inline::foo1::Foo1 for Component {
+    impl exports::my::inline::foo1::Guest for Component {
         fn foo() {}
     }
 
-    impl exports::my::inline::foo2::Foo2 for Component {
+    impl exports::my::inline::foo2::Guest for Component {
         fn foo() {}
     }
 
-    impl exports::my::inline::bar1::Bar1 for Component {
+    impl exports::my::inline::bar1::Guest for Component {
         fn bar() -> String {
             String::new()
         }
     }
 
-    impl exports::my::inline::bar2::Bar2 for Component {
+    impl exports::my::inline::bar2::Guest for Component {
         fn bar() -> String {
             String::new()
         }
@@ -191,7 +191,84 @@ mod alternative_runtime_path {
 
     struct Component;
 
-    impl Foo for Component {
+    impl Guest for Component {
         fn foobar() {}
+    }
+}
+
+mod alternative_bitflags_path {
+    wit_bindgen::generate!({
+        inline: "
+            package my:inline
+            world foo {
+                flags bar {
+                    foo,
+                    bar,
+                    baz
+                }
+                export get-flag: func() -> bar
+            }
+        ",
+        bitflags_path: "my_bitflags",
+        exports: {
+            world: Component
+        }
+    });
+
+    pub(crate) use wit_bindgen::bitflags as my_bitflags;
+
+    struct Component;
+
+    impl Guest for Component {
+        fn get_flag() -> Bar {
+            Bar::BAZ
+        }
+    }
+}
+
+mod owned_resource_deref_mut {
+    wit_bindgen::generate!({
+        inline: "
+            package my:inline
+
+            interface foo {
+                resource bar {
+                    constructor(data: u32)
+                    get-data: func() -> u32
+                    consume: static func(%self: bar) -> u32
+                }
+            }
+
+            world baz {
+                export foo
+            }
+        ",
+        exports: {
+            "my:inline/foo/bar": Resource
+        }
+    });
+
+    pub struct Resource {
+        data: u32,
+    }
+
+    impl exports::my::inline::foo::GuestBar for Resource {
+        fn new(data: u32) -> Self {
+            Self { data }
+        }
+
+        fn get_data(&self) -> u32 {
+            self.data
+        }
+
+        fn consume(mut this: exports::my::inline::foo::OwnBar) -> u32 {
+            // Check that Deref<Target = Self> is implemented
+            let prior_data: &u32 = &this.data;
+            let new_data = prior_data + 1;
+            // Check that DerefMut<Target = Self> is implemented
+            let mutable_data: &mut u32 = &mut this.data;
+            *mutable_data = new_data;
+            this.data
+        }
     }
 }

@@ -1,18 +1,18 @@
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use heck::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::mem;
 use std::process::{Command, Stdio};
-use wit_bindgen_core::wit_parser::abi::{AbiVariant, Bindgen, Instruction, LiftLower, WasmType};
+use wit_bindgen_core::abi::{self, AbiVariant, Bindgen, Instruction, LiftLower, WasmType};
 use wit_bindgen_core::{
     uwrite, uwriteln, wit_parser::*, Files, InterfaceGenerator as _, Source, TypeInfo, Types,
     WorldGenerator,
 };
 use wit_bindgen_rust_lib::{
-    dealias, int_repr, to_rust_ident, wasm_type, FnSig, Ownership, RustFlagsRepr,
-    RustFunctionGenerator, RustGenerator, TypeMode,
+    dealias, int_repr, to_rust_ident, to_upper_camel_case, wasm_type, FnSig, Ownership,
+    RustFlagsRepr, RustFunctionGenerator, RustGenerator, TypeMode,
 };
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
@@ -137,6 +137,12 @@ pub struct Opts {
     /// This defaults to `wit_bindgen::rt`.
     #[cfg_attr(feature = "clap", arg(long))]
     pub runtime_path: Option<String>,
+
+    /// The optional path to the bitflags crate to use.
+    ///
+    /// This defaults to `wit_bindgen::bitflags`.
+    #[cfg_attr(feature = "clap", arg(long))]
+    pub bitflags_path: Option<String>,
 }
 
 impl Opts {
@@ -213,6 +219,30 @@ impl RustWasm {
             .as_deref()
             .unwrap_or("wit_bindgen::rt")
     }
+
+    fn bitflags_path(&self) -> &str {
+        self.opts
+            .bitflags_path
+            .as_deref()
+            .unwrap_or("wit_bindgen::bitflags")
+    }
+
+    fn lookup_export(&self, key: &ExportKey) -> Result<String> {
+        if let Some(key) = self.opts.exports.get(key) {
+            return Ok(key.clone());
+        }
+        if self.opts.stubs {
+            return Ok("Stub".to_owned());
+        }
+        let key = match key {
+            ExportKey::World => "world",
+            ExportKey::Name(name) => name,
+        };
+        if self.opts.exports.is_empty() {
+            bail!("no `exports` map provided in configuration but key is required for `{key}`")
+        }
+        bail!("expected `exports` map to contain key `{key}`")
+    }
 }
 
 impl WorldGenerator for RustWasm {
@@ -285,20 +315,11 @@ impl WorldGenerator for RustWasm {
                 String::new()
             }
         );
-        let impl_name = self
-            .opts
-            .exports
-            .get(&ExportKey::Name(path.clone()))
-            .cloned()
-            .or_else(|| self.opts.stubs.then(|| "Stub".to_owned()))
-            .ok_or_else(|| format!("export parameter required for `{path}`"));
         let mut gen = self.interface(Identifier::Interface(id, name), None, resolve, false);
         let (snake, path_to_root, pkg) = gen.start_append_submodule(name);
         gen.types(id);
         gen.generate_exports(
-            &inner_name.to_upper_camel_case(),
-            Some(&path),
-            impl_name.as_deref().map_err(|s| s.as_str()),
+            &ExportKey::Name(path),
             Some(name),
             resolve.interfaces[id].functions.values(),
         )?;
@@ -313,23 +334,8 @@ impl WorldGenerator for RustWasm {
         funcs: &[(&str, &Function)],
         _files: &mut Files,
     ) -> Result<()> {
-        let world_name = &resolve.worlds[world].name;
-        let impl_name = self
-            .opts
-            .exports
-            .get(&ExportKey::World)
-            .cloned()
-            .or_else(|| self.opts.stubs.then(|| "Stub".to_owned()))
-            .ok_or_else(|| format!("export parameter required for `world`"));
-        let trait_name = world_name.to_upper_camel_case();
         let mut gen = self.interface(Identifier::World(world), None, resolve, false);
-        gen.generate_exports(
-            &trait_name,
-            None,
-            impl_name.as_deref().map_err(|s| s.as_str()),
-            None,
-            funcs.iter().map(|f| f.1),
-        )?;
+        gen.generate_exports(&ExportKey::World, None, funcs.iter().map(|f| f.1))?;
         let src = gen.finish();
         self.src.push_str(&src);
         Ok(())
@@ -503,9 +509,7 @@ struct InterfaceGenerator<'a> {
 impl InterfaceGenerator<'_> {
     fn generate_exports<'a>(
         &mut self,
-        trait_name: &str,
-        path: Option<&str>,
-        impl_name: Result<&str, &str>,
+        export_key: &ExportKey,
         interface_name: Option<&WorldKey>,
         funcs: impl Iterator<Item = &'a Function>,
     ) -> Result<()> {
@@ -534,13 +538,16 @@ impl InterfaceGenerator<'_> {
 
         for (resource, funcs) in by_resource {
             let trait_name = if let Some(ty) = resource {
-                self.resolve.types[ty]
-                    .name
-                    .as_deref()
-                    .unwrap()
-                    .to_upper_camel_case()
+                format!(
+                    "Guest{}",
+                    self.resolve.types[ty]
+                        .name
+                        .as_deref()
+                        .unwrap()
+                        .to_upper_camel_case()
+                )
             } else {
-                trait_name.to_owned()
+                "Guest".to_string()
             };
             let mut saw_export = false;
             uwriteln!(self.src, "pub trait {trait_name} {{");
@@ -573,35 +580,24 @@ impl InterfaceGenerator<'_> {
                     path_to_root.push_str("super::");
                 }
                 if let Some(ty) = resource {
-                    let path = format!(
-                        "{}/{}",
-                        path.expect("resources can only be exported from interfaces"),
-                        self.resolve.types[ty].name.as_deref().unwrap()
-                    );
-                    let impl_name = self
-                        .gen
-                        .opts
-                        .exports
-                        .get(&ExportKey::Name(path.clone()))
-                        .cloned()
-                        .or_else(|| self.gen.opts.stubs.then(|| "Stub".to_owned()))
-                        .ok_or_else(|| anyhow!("export parameter required for `{path}`"))?;
-
-                    uwriteln!(
-                        self.src,
-                        "pub use {path_to_root}{impl_name} as Rep{trait_name};"
-                    );
+                    let path = match &export_key {
+                        ExportKey::World => panic!("can't export resources from worlds"),
+                        ExportKey::Name(path) => path,
+                    };
+                    let name = self.resolve.types[ty].name.as_deref().unwrap();
+                    let path = format!("{path}/{name}");
+                    let export_key = ExportKey::Name(path);
+                    let impl_name = self.gen.lookup_export(&export_key)?;
+                    let name = to_upper_camel_case(name);
+                    uwriteln!(self.src, "pub use {path_to_root}{impl_name} as {name};");
                 } else {
-                    let impl_name = impl_name.map_err(|s| anyhow!("{s}"))?;
-                    uwriteln!(
-                        self.src,
-                        "use {path_to_root}{impl_name} as {trait_name}Impl;"
-                    );
+                    let impl_name = self.gen.lookup_export(&export_key)?;
+                    uwriteln!(self.src, "use {path_to_root}{impl_name} as _GuestImpl;");
                 }
                 if saw_export {
                     self.src.push_str("const _: () = {\n");
                     for &func in &funcs {
-                        self.generate_guest_export(func, interface_name, &trait_name);
+                        self.generate_guest_export(func, interface_name);
                     }
                     self.src.push_str("};\n");
                 }
@@ -655,7 +651,6 @@ impl InterfaceGenerator<'_> {
                         #[derive(Debug)]
                         pub struct {camel} {{
                             handle: i32,
-                            owned: bool,
                         }}
 
                         impl Drop for {camel} {{
@@ -664,33 +659,22 @@ impl InterfaceGenerator<'_> {
                                      #[cfg(not(target_arch = "wasm32"))]
                                      unsafe fn wit_import(_n: i32) {{ unreachable!() }}
 
-                                     if self.owned {{
-                                         #[cfg(target_arch = "wasm32")]
-                                         #[link(wasm_import_module = "{wasm_import_module}")]
-                                         extern "C" {{
-                                             #[link_name = "[resource-drop]{name}"]
-                                             fn wit_import(_: i32);
-                                         }}
-
-                                         wit_import(self.handle)
-                                     }} else {{
-                                         #[cfg(target_arch = "wasm32")]
-                                         #[link(wasm_import_module = "{wasm_import_module}")]
-                                         extern "C" {{
-                                             #[link_name = "[resource-drop]{name}"]
-                                             fn wit_import(_: i32);
-                                         }}
-
-                                         wit_import(self.handle)
+                                     #[cfg(target_arch = "wasm32")]
+                                     #[link(wasm_import_module = "{wasm_import_module}")]
+                                     extern "C" {{
+                                         #[link_name = "[resource-drop]{name}"]
+                                         fn wit_import(_: i32);
                                      }}
+
+                                     wit_import(self.handle)
                                  }}
                              }}
                         }}
 
                         impl {camel} {{
                             #[doc(hidden)]
-                            pub unsafe fn from_handle(handle: i32, owned: bool) -> Self {{
-                                Self {{ handle, owned }}
+                            pub unsafe fn from_handle(handle: i32) -> Self {{
+                                Self {{ handle }}
                             }}
 
                             #[doc(hidden)]
@@ -754,7 +738,7 @@ impl InterfaceGenerator<'_> {
                         #[allow(unused_imports)]
                         use {rt}::boxed::Box;
 
-                        drop(Box::from_raw(::core::mem::transmute::<isize, *mut Rep{camel}>(
+                        drop(Box::from_raw(::core::mem::transmute::<isize, *mut {camel}>(
                             arg0.try_into().unwrap(),
                         )))
                     }}
@@ -782,7 +766,7 @@ impl InterfaceGenerator<'_> {
                             ::core::mem::ManuallyDrop::new(self).handle
                         }}
 
-                        pub fn new(rep: Rep{camel}) -> Own{camel} {{
+                        pub fn new(rep: {camel}) -> Own{camel} {{
                             #[allow(unused_imports)]
                             use {rt}::boxed::Box;
 
@@ -799,7 +783,7 @@ impl InterfaceGenerator<'_> {
 
                                 Own{camel} {{
                                     handle: wit_import(
-                                        ::core::mem::transmute::<*mut Rep{camel}, isize>(
+                                        ::core::mem::transmute::<*mut {camel}, isize>(
                                             Box::into_raw(Box::new(rep))
                                         )
                                             .try_into()
@@ -811,9 +795,9 @@ impl InterfaceGenerator<'_> {
                     }}
 
                     impl core::ops::Deref for Own{camel} {{
-                        type Target = Rep{camel};
+                        type Target = {camel};
 
-                        fn deref(&self) -> &Rep{camel} {{
+                        fn deref(&self) -> &{camel} {{
                             unsafe {{
                                 #[cfg(target_arch = "wasm32")]
                                 #[link(wasm_import_module = "[export]{module}")]
@@ -825,7 +809,27 @@ impl InterfaceGenerator<'_> {
                                 #[cfg(not(target_arch = "wasm32"))]
                                 unsafe fn wit_import(_n: i32) -> i32 {{ unreachable!() }}
 
-                                ::core::mem::transmute::<isize, &Rep{camel}>(
+                                ::core::mem::transmute::<isize, &{camel}>(
+                                    wit_import(self.handle).try_into().unwrap()
+                                )
+                            }}
+                        }}
+                    }}
+
+                    impl core::ops::DerefMut for Own{camel} {{
+                        fn deref_mut(&mut self) -> &mut {camel} {{
+                            unsafe {{
+                                #[cfg(target_arch = "wasm32")]
+                                #[link(wasm_import_module = "[export]{module}")]
+                                extern "C" {{
+                                    #[link_name = "[resource-rep]{name}"]
+                                    fn wit_import(_: i32) -> i32;
+                                }}
+
+                                #[cfg(not(target_arch = "wasm32"))]
+                                unsafe fn wit_import(_n: i32) -> i32 {{ unreachable!() }}
+
+                                ::core::mem::transmute::<isize, &mut {camel}>(
                                     wit_import(self.handle).try_into().unwrap()
                                 )
                             }}
@@ -944,8 +948,9 @@ impl InterfaceGenerator<'_> {
         ));
         self.src.push_str("unsafe {\n");
 
-        let mut f = FunctionBindgen::new(self, params, None);
-        f.gen.resolve.call(
+        let mut f = FunctionBindgen::new(self, params);
+        abi::call(
+            f.gen.resolve,
             AbiVariant::GuestImport,
             LiftLower::LowerArgsLiftResults,
             func,
@@ -978,12 +983,7 @@ impl InterfaceGenerator<'_> {
         self.src.push_str("}\n");
     }
 
-    fn generate_guest_export(
-        &mut self,
-        func: &Function,
-        interface_name: Option<&WorldKey>,
-        trait_name: &str,
-    ) {
+    fn generate_guest_export(&mut self, func: &Function, interface_name: Option<&WorldKey>) {
         if self.gen.skip.contains(&func.name) {
             return;
         }
@@ -1045,8 +1045,9 @@ impl InterfaceGenerator<'_> {
             rt = self.gen.runtime_path()
         );
 
-        let mut f = FunctionBindgen::new(self, params, Some(trait_name));
-        f.gen.resolve.call(
+        let mut f = FunctionBindgen::new(self, params);
+        abi::call(
+            f.gen.resolve,
             AbiVariant::GuestExport,
             LiftLower::LiftArgsLowerResults,
             func,
@@ -1061,7 +1062,7 @@ impl InterfaceGenerator<'_> {
         self.src.push_str(&String::from(src));
         self.src.push_str("}\n");
 
-        if self.resolve.guest_export_needs_post_return(func) {
+        if abi::guest_export_needs_post_return(self.resolve, func) {
             let export_prefix = self.gen.opts.export_prefix.as_deref().unwrap_or("");
             uwrite!(
                 self.src,
@@ -1081,8 +1082,8 @@ impl InterfaceGenerator<'_> {
             }
             self.src.push_str(") {\n");
 
-            let mut f = FunctionBindgen::new(self, params, Some(trait_name));
-            f.gen.resolve.post_return(func, &mut f);
+            let mut f = FunctionBindgen::new(self, params);
+            abi::post_return(f.gen.resolve, func, &mut f);
             let FunctionBindgen {
                 needs_cleanup_list,
                 src,
@@ -1116,13 +1117,16 @@ impl InterfaceGenerator<'_> {
 
         let name = resource
             .map(|ty| {
-                self.resolve.types[ty]
-                    .name
-                    .as_deref()
-                    .unwrap()
-                    .to_upper_camel_case()
+                format!(
+                    "Guest{}",
+                    self.resolve.types[ty]
+                        .name
+                        .as_deref()
+                        .unwrap()
+                        .to_upper_camel_case()
+                )
             })
-            .unwrap_or_else(|| name.to_upper_camel_case());
+            .unwrap_or_else(|| "Guest".to_string());
 
         let qualified_name = if in_interface {
             format!("exports::{path}::{name}")
@@ -1291,7 +1295,10 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
     }
 
     fn type_flags(&mut self, _id: TypeId, name: &str, flags: &Flags, docs: &Docs) {
-        self.src.push_str("wit_bindgen::bitflags::bitflags! {\n");
+        self.src.push_str(&format!(
+            "{bitflags}::bitflags! {{\n",
+            bitflags = self.gen.bitflags_path()
+        ));
         self.rustdoc(docs);
         let repr = RustFlagsRepr::new(flags);
         self.src.push_str(&format!(
@@ -1314,10 +1321,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
         self.print_typedef_variant(id, variant, docs, false);
     }
 
-    fn type_union(&mut self, id: TypeId, _name: &str, union: &Union, docs: &Docs) {
-        self.print_typedef_union(id, union, docs, false);
-    }
-
     fn type_option(&mut self, id: TypeId, _name: &str, payload: &Type, docs: &Docs) {
         self.print_typedef_option(id, payload, docs);
     }
@@ -1329,7 +1332,7 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
     fn type_enum(&mut self, id: TypeId, name: &str, enum_: &Enum, docs: &Docs) {
         self.print_typedef_enum(id, name, enum_, docs, &[], Box::new(|_| String::new()));
 
-        let name = name.to_upper_camel_case();
+        let name = to_upper_camel_case(name);
         let mut cases = String::new();
         let repr = int_repr(enum_.tag());
         for (i, case) in enum_.cases.iter().enumerate() {
@@ -1376,7 +1379,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
 struct FunctionBindgen<'a, 'b> {
     gen: &'b mut InterfaceGenerator<'a>,
     params: Vec<String>,
-    trait_name: Option<&'b str>,
     src: Source,
     blocks: Vec<String>,
     block_storage: Vec<(Source, Vec<(String, String)>)>,
@@ -1388,15 +1390,10 @@ struct FunctionBindgen<'a, 'b> {
 }
 
 impl<'a, 'b> FunctionBindgen<'a, 'b> {
-    fn new(
-        gen: &'b mut InterfaceGenerator<'a>,
-        params: Vec<String>,
-        trait_name: Option<&'b str>,
-    ) -> FunctionBindgen<'a, 'b> {
+    fn new(gen: &'b mut InterfaceGenerator<'a>, params: Vec<String>) -> FunctionBindgen<'a, 'b> {
         FunctionBindgen {
             gen,
             params,
-            trait_name,
             src: Default::default(),
             blocks: Vec::new(),
             block_storage: Vec::new(),
@@ -1690,9 +1687,9 @@ impl Bindgen for FunctionBindgen<'_, '_> {
 
             Instruction::HandleLift { handle, .. } => {
                 let op = &operands[0];
-                let (prefix, resource, owned) = match handle {
-                    Handle::Borrow(resource) => ("&", resource, false),
-                    Handle::Own(resource) => ("", resource, true),
+                let (prefix, resource) = match handle {
+                    Handle::Borrow(resource) => ("&", resource),
+                    Handle::Own(resource) => ("", resource),
                 };
                 let resource = dealias(resolve, *resource);
 
@@ -1706,7 +1703,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                                     .unwrap()
                                     .to_upper_camel_case();
                                 format!(
-                                    "::core::mem::transmute::<isize, &Rep{name}>\
+                                    "::core::mem::transmute::<isize, &{name}>\
                                      ({op}.try_into().unwrap())"
                                 )
                             }
@@ -1717,7 +1714,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                         }
                     } else {
                         let name = self.gen.type_path(resource, true);
-                        format!("{prefix}{name}::from_handle({op}, {owned})")
+                        format!("{prefix}{name}::from_handle({op})")
                     },
                 );
             }
@@ -1808,66 +1805,6 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                         uwriteln!(self.src, "let e{tmp} = {block};");
                         uwriteln!(self.src, "{name}::{case_name}(e{tmp})");
                     }
-                    uwriteln!(self.src, "}}");
-                }
-                uwriteln!(self.src, "}};");
-                results.push(format!("v{tmp}"));
-            }
-
-            Instruction::UnionLower {
-                union,
-                results: result_types,
-                ty,
-                ..
-            } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-                self.let_results(result_types.len(), results);
-                let op0 = &operands[0];
-                self.push_str(&format!("match {op0} {{\n"));
-                let name = self.typename_lower(*ty);
-                for (case_name, block) in self.gen.union_case_names(union).into_iter().zip(blocks) {
-                    self.push_str(&format!("{name}::{case_name}(e) => {block},\n"));
-                }
-                self.push_str("};\n");
-            }
-
-            Instruction::UnionLift { union, ty, .. } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-                let op0 = &operands[0];
-                let tmp = self.tmp();
-                let name = self.typename_lift(*ty);
-                let name = if name.contains("::") {
-                    uwriteln!(self.src, "use {name} as V{tmp};");
-                    format!("V{tmp}")
-                } else {
-                    name
-                };
-                uwriteln!(self.src, "let v{tmp} = match {op0} {{");
-                for (i, (case_name, block)) in self
-                    .gen
-                    .union_case_names(union)
-                    .into_iter()
-                    .zip(blocks)
-                    .enumerate()
-                {
-                    if i == union.cases.len() - 1 {
-                        uwriteln!(
-                            self.src,
-                            "n => {{
-                                debug_assert_eq!(n, {i}, \"invalid enum discriminant\");\
-                            "
-                        );
-                    } else {
-                        uwriteln!(self.src, "{i} => {{");
-                    }
-                    uwriteln!(self.src, "let e{tmp} = {block};");
-                    uwriteln!(self.src, "{name}::{case_name}(e{tmp})");
                     uwriteln!(self.src, "}}");
                 }
                 uwriteln!(self.src, "}};");
@@ -2130,14 +2067,13 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                 match &func.kind {
                     FunctionKind::Freestanding => {
                         self.push_str(&format!(
-                            "<{0}Impl as {0}>::{1}",
-                            self.trait_name.unwrap(),
+                            "<_GuestImpl as Guest>::{}",
                             to_rust_ident(&func.name)
                         ));
                     }
                     FunctionKind::Method(ty) | FunctionKind::Static(ty) => {
                         self.push_str(&format!(
-                            "<Rep{0} as {0}>::{1}",
+                            "<{0} as Guest{0}>::{1}",
                             resolve.types[*ty]
                                 .name
                                 .as_deref()
@@ -2149,7 +2085,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                     FunctionKind::Constructor(ty) => {
                         self.gen.mark_resource_owned(*ty);
                         self.push_str(&format!(
-                            "Own{0}::new(<Rep{0} as {0}>::new",
+                            "Own{0}::new(<{0} as Guest{0}>::new",
                             resolve.types[*ty]
                                 .name
                                 .as_deref()

@@ -7,12 +7,12 @@ use std::{
     ops::Deref,
 };
 use wit_bindgen_core::{
+    abi::{self, AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType},
     uwrite, uwriteln,
     wit_parser::{
-        abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType},
-        Case, Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
-        Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Union,
-        Variant, WorldId, WorldKey,
+        Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record, Resolve,
+        Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId,
+        WorldKey,
     },
     Files, InterfaceGenerator as _, Ns, Source, WorldGenerator,
 };
@@ -496,7 +496,8 @@ impl InterfaceGenerator<'_> {
                 .collect(),
         );
 
-        bindgen.gen.resolve.call(
+        abi::call(
+            bindgen.gen.resolve,
             AbiVariant::GuestImport,
             LiftLower::LowerArgsLiftResults,
             func,
@@ -564,7 +565,8 @@ impl InterfaceGenerator<'_> {
             (0..sig.params.len()).map(|i| format!("p{i}")).collect(),
         );
 
-        bindgen.gen.resolve.call(
+        abi::call(
+            bindgen.gen.resolve,
             AbiVariant::GuestExport,
             LiftLower::LiftArgsLowerResults,
             func,
@@ -604,7 +606,7 @@ impl InterfaceGenerator<'_> {
             "#
         );
 
-        if self.resolve.guest_export_needs_post_return(func) {
+        if abi::guest_export_needs_post_return(self.resolve, func) {
             let params = sig
                 .results
                 .iter()
@@ -622,7 +624,7 @@ impl InterfaceGenerator<'_> {
                 (0..sig.results.len()).map(|i| format!("p{i}")).collect(),
             );
 
-            bindgen.gen.resolve.post_return(func, &mut bindgen);
+            abi::post_return(bindgen.gen.resolve, func, &mut bindgen);
 
             let src = bindgen.src;
 
@@ -1037,26 +1039,6 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
         self.type_name(&Type::Id(id));
     }
 
-    fn type_union(&mut self, id: TypeId, name: &str, union: &Union, docs: &Docs) {
-        self.type_variant(
-            id,
-            name,
-            &Variant {
-                cases: union
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .map(|(i, case)| Case {
-                        docs: case.docs.clone(),
-                        name: format!("f{i}"),
-                        ty: Some(case.ty),
-                    })
-                    .collect(),
-            },
-            docs,
-        )
-    }
-
     fn type_enum(&mut self, _id: TypeId, name: &str, enum_: &Enum, docs: &Docs) {
         self.print_docs(docs);
 
@@ -1453,48 +1435,6 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                 &operands[0],
                 results,
             ),
-
-            Instruction::UnionLower {
-                union,
-                results: lowered_types,
-                ..
-            } => {
-                let cases = union
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .map(|(i, case)| (format!("f{i}"), case.ty))
-                    .collect::<Vec<_>>();
-
-                self.lower_variant(
-                    &cases
-                        .iter()
-                        .map(|(name, ty)| (name.deref(), Some(*ty)))
-                        .collect::<Vec<_>>(),
-                    lowered_types,
-                    &operands[0],
-                    results,
-                )
-            }
-
-            Instruction::UnionLift { union, ty, .. } => {
-                let cases = union
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .map(|(i, case)| (format!("f{i}"), case.ty))
-                    .collect::<Vec<_>>();
-
-                self.lift_variant(
-                    &Type::Id(*ty),
-                    &cases
-                        .iter()
-                        .map(|(name, ty)| (name.deref(), Some(*ty)))
-                        .collect::<Vec<_>>(),
-                    &operands[0],
-                    results,
-                )
-            }
 
             Instruction::OptionLower {
                 results: lowered_types,

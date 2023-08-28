@@ -10,7 +10,7 @@ use exports::test::flavorful::test::*;
 
 struct Component;
 
-impl Flavorful for Component {
+impl Guest for Component {
     fn test_imports() {
         use test::flavorful::test::*;
 
@@ -37,11 +37,7 @@ impl Flavorful for Component {
             "result4"
         );
 
-        f_list_in_variant1(
-            &Some("foo".to_string()),
-            &Err("bar".to_string()),
-            &ListInVariant1V3::String("baz".to_string()),
-        );
+        f_list_in_variant1(&Some("foo".to_string()), &Err("bar".to_string()));
         assert_eq!(f_list_in_variant2(), Some("list_in_variant2".to_string()));
         assert_eq!(
             f_list_in_variant3(&Some("input3".to_string())),
@@ -72,7 +68,7 @@ impl Flavorful for Component {
     }
 }
 
-impl Test for Component {
+impl exports::test::flavorful::test::Guest for Component {
     fn f_list_in_record1(ty: ListInRecord1) {
         assert_eq!(ty.a, "list_in_record1");
     }
@@ -97,13 +93,9 @@ impl Test for Component {
         }
     }
 
-    fn f_list_in_variant1(a: ListInVariant1V1, b: ListInVariant1V2, c: ListInVariant1V3) {
+    fn f_list_in_variant1(a: ListInVariant1V1, b: ListInVariant1V2) {
         assert_eq!(a.unwrap(), "foo");
         assert_eq!(b.unwrap_err(), "bar");
-        match c {
-            ListInVariant1V3::String(s) => assert_eq!(s, "baz"),
-            ListInVariant1V3::F32(_) => panic!(),
-        }
     }
 
     fn f_list_in_variant2() -> Option<String> {
