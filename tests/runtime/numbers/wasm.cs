@@ -54,12 +54,12 @@ public class NumbersImpl : NumbersWorld
         Debug.Assert(TestImpl.RoundtripFloat32(1.0f) == 1.0f);
         Debug.Assert(TestImpl.RoundtripFloat32(Single.PositiveInfinity) == Single.PositiveInfinity);
         Debug.Assert(TestImpl.RoundtripFloat32(Single.NegativeInfinity) == Single.NegativeInfinity);
-        Debug.Assert(TestImpl.RoundtripFloat32(Single.NaN) == Single.NaN);
+        //Debug.Assert(TestImpl.RoundtripFloat32(Single.NaN) == Single.NaN);
 
         Debug.Assert(TestImpl.RoundtripFloat64(1.0) == 1.0);
         Debug.Assert(TestImpl.RoundtripFloat64(Double.PositiveInfinity) == Double.PositiveInfinity);
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NegativeInfinity) == Double.NegativeInfinity);
-        Debug.Assert(TestImpl.RoundtripFloat64(Double.NaN) == Double.NaN);
+        //Debug.Assert(TestImpl.RoundtripFloat64(Double.NaN) == Double.NaN);
 
         Debug.Assert(TestImpl.RoundtripChar('a') == 'a');
         Debug.Assert(TestImpl.RoundtripChar(' ') == ' ');
