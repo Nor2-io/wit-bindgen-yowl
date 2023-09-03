@@ -25,11 +25,13 @@ pulldown-cmark = { version = "0.9", default-features = false }
 clap = { version = "4.3.19", features = ["derive"] }
 env_logger = "0.10.0"
 indexmap = "2.0.0"
+async-trait = "0.1.73"
 
 wasm-encoder = "0.32.0"
 wasm-metadata = "0.10.3"
 wit-parser = "0.11.0"
 wit-component = "0.14.0"
+wasmtime_wasi = "11.0.1"
 
 wit-bindgen-core = { path = 'crates/core', version = '0.10.0' }
 wit-bindgen-c = { path = 'crates/c', version = '0.10.0' }
@@ -61,6 +63,8 @@ wit-bindgen-teavm-java = { workspace = true, features = [
 wit-bindgen-go = { workspace = true, features = ['clap'], optional = true }
 wit-component = { workspace = true }
 wasm-encoder = { workspace = true }
+wasmtime-wasi = { workdpace = true }
+async-trait = "0.1.73"
 
 [features]
 default = [
@@ -83,3 +87,5 @@ heck = { workspace = true }
 wasmtime = { version = "12", features = ['component-model'] }
 test-artifacts = { path = 'crates/test-rust-wasm/artifacts' }
 wit-parser = { workspace = true }
+tokio = { version = "1.28.1", features = ["full"] }
+async-trait = { workspace = true }
