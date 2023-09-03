@@ -1,4 +1,5 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use heck::ToUpperCamelCase;
 use std::fs;
 use std::io::Write;
@@ -6,10 +7,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::preview2::{Table, WasiCtx, WasiCtxBuilder, WasiView};
 use wit_component::ComponentEncoder;
 use wit_parser::Resolve;
-use wasmtime_wasi::preview2::{WasiCtx, Table, WasiView, WasiCtxBuilder};
-use async_trait::async_trait;
 
 mod flavorful;
 mod lists;
@@ -23,12 +23,11 @@ mod variants;
 
 wasmtime::component::bindgen!(in "crates/wasi_snapshot_preview1/wit");
 
-struct MyCtx {
-}
+struct MyCtx {}
 
-struct Wasi<T : Send>(T,MyCtx, Table, WasiCtx);
+struct Wasi<T: Send>(T, MyCtx, Table, WasiCtx);
 
-impl<T : Send> testwasi::Host for Wasi<T> {
+impl<T: Send> testwasi::Host for Wasi<T> {
     fn log(&mut self, bytes: Vec<u8>) -> Result<()> {
         std::io::stdout().write_all(&bytes)?;
         Ok(())
@@ -41,7 +40,7 @@ impl<T : Send> testwasi::Host for Wasi<T> {
 }
 
 // wasi trait
-impl<T : Send> WasiView for Wasi<T> {
+impl<T: Send> WasiView for Wasi<T> {
     fn table(&self) -> &Table {
         &self.2
     }
@@ -58,27 +57,32 @@ impl<T : Send> WasiView for Wasi<T> {
 
 #[async_trait]
 trait TestConfigurer<T, U>
-where 
+where
     T: Send,
-    U : Sized,
+    U: Sized,
 {
-     async fn instantiate_async(&self, store: &mut Store<Wasi<T>>, component: &Component, linker: &Linker<Wasi<T>>) -> Result<(U, Instance)>;
-     async fn test(&self, exports: U, store: &mut Store<Wasi<T>>) -> Result<()>;
+    async fn instantiate_async(
+        &self,
+        store: &mut Store<Wasi<T>>,
+        component: &Component,
+        linker: &Linker<Wasi<T>>,
+    ) -> Result<(U, Instance)>;
+    async fn test(&self, exports: U, store: &mut Store<Wasi<T>>) -> Result<()>;
 }
 
-async fn run_test<T : Send, U, C>(
+async fn run_test<T: Send, U, C>(
     name: &str,
     add_to_linker: fn(&mut Linker<Wasi<T>>) -> Result<()>,
     configurer: C,
 ) -> Result<()>
 where
     T: Default,
-    C: TestConfigurer<T, U>
+    C: TestConfigurer<T, U>,
 {
     run_test_from_dir(name, name, add_to_linker, configurer).await
 }
 
-async fn run_test_from_dir<T : Send, U, C>(
+async fn run_test_from_dir<T: Send, U, C>(
     dir_name: &str,
     name: &str,
     add_to_linker: fn(&mut Linker<Wasi<T>>) -> Result<()>,
@@ -86,7 +90,7 @@ async fn run_test_from_dir<T : Send, U, C>(
 ) -> Result<()>
 where
     T: Default,
-    C: TestConfigurer<T, U>
+    C: TestConfigurer<T, U>,
 {
     // Create an engine with caching enabled to assist with iteration in this
     // project.
@@ -95,7 +99,7 @@ where
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     config.wasm_component_model(true);
     config.async_support(true);
-    
+
     let engine = Engine::new(&config)?;
 
     for wasm in tests(name, dir_name)? {
@@ -112,22 +116,27 @@ where
 
         println!("testwasi added to linker");
 
-        let state = MyCtx  { };
-        
+        let state = MyCtx {};
+
         let mut table = Table::new();
-        let wasi: WasiCtx = WasiCtxBuilder::new().inherit_stdout().set_args(&[""]).build(&mut table)?;
+        let wasi: WasiCtx = WasiCtxBuilder::new()
+            .inherit_stdout()
+            .set_args(&[""])
+            .build(&mut table)?;
 
         println!("wasi ctx built");
 
-        let data = Wasi (T::default(), state, table, wasi);
+        let data = Wasi(T::default(), state, table, wasi);
 
         let mut store = Store::new(&engine, data);
 
-        wasmtime_wasi::preview2::command::add_to_linker(&mut linker);
+        wasmtime_wasi::preview2::command::add_to_linker(&mut linker)?;
 
         println!("instantiate");
 
-        let (exports, _) = configurer.instantiate_async(&mut store, &component, &linker).await?;
+        let (exports, _) = configurer
+            .instantiate_async(&mut store, &component, &linker)
+            .await?;
         println!("instantiate testing");
 
         println!("testing {wasm:?}");
@@ -172,7 +181,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     out_dir.push(name);
 
     println!("wasi adapter = {:?}", test_artifacts::ADAPTER);
-    let wasi_adapter = std::fs::read("C:\\Users\\scott\\Downloads\\wasi_snapshot_preview1.reactor(1).wasm")?;
+    let wasi_adapter = std::fs::read("./wasi_snapshot_preview1.reactor.wasm")?;
 
     drop(std::fs::remove_dir_all(&out_dir));
     std::fs::create_dir_all(&out_dir)?;
@@ -517,7 +526,11 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         fs::create_dir_all(&out_dir).unwrap();
 
         for csharp_impl in &c_sharp {
-            fs::copy(&csharp_impl, &out_dir.join(csharp_impl.file_name().unwrap())).unwrap();
+            fs::copy(
+                &csharp_impl,
+                &out_dir.join(csharp_impl.file_name().unwrap()),
+            )
+            .unwrap();
         }
 
         let snake = world_name.replace("-", "_");
@@ -720,9 +733,8 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .arg("/p:MSBuildEnableWorkloadResolver=false")
             .arg("--self-contained")
             .arg("/p:UseAppHost=false")
-            .arg("/bl")
-             .arg("-o")
-             .arg(&out_wasm);
+            .arg("-o")
+            .arg(&out_wasm);
         println!("{:?}", cmd);
         let output = match cmd.output() {
             Ok(output) => output,
