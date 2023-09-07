@@ -73,7 +73,7 @@ public class NumbersImpl : NumbersWorld
     }
 }
 
-public class TestImpl : ITest
+public class TestImpl
 {
     static uint SCALAR = 0;
 
