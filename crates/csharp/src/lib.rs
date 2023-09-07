@@ -469,7 +469,7 @@ impl InterfaceGenerator<'_> {
             &mut bindgen,
         );
 
-        let sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
+        let _sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
 
         let result_type: String = match func.results.len() {
             0 => "void".to_string(),
@@ -1129,7 +1129,11 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::F32Load { offset } => results.push(format!("returnArea.GetF32({offset})")),
             Instruction::F64Load { offset } => results.push(format!("returnArea.GetF64({offset})")),
 
-            Instruction::I32Store { .. } => todo!("I32Store"),
+            Instruction::I32Store { offset } => results.push(format!("returnArea.SetS32({offset}, {}, {})",
+                    operands[1],
+                    operands[0]
+                )
+            ),
             Instruction::I32Store8 { .. } => todo!("I32Store8"),
             Instruction::I32Store16 { .. } => todo!("I32Store16"),
             Instruction::I64Store { .. } => todo!("I64Store"),
