@@ -716,10 +716,8 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--",
-                    "strings",
                     "-p",
-                    "wit-bindgen-csharp"
+                    "wit-bindgen-csharp",
                 ],
                 "filter": {
                     "name": "codegen",

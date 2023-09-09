@@ -312,6 +312,35 @@ impl WorldGenerator for CSharp {
 
         src.push_str("}\n");
 
+        src.push_str(
+            r#"
+                internal static class Intrinsics
+                {
+                    [UnmanagedCallersOnly]
+                    internal static IntPtr cabi_realloc(IntPtr ptr, ulong old_size, ulong align, ulong new_size)
+                    {
+                        if (new_size == 0) 
+                        {
+                            if(old_size != 0)
+                            {
+                                Marshal.Release(ptr)
+                            }
+                            return (void*) align;
+                        }
+                        
+                        if(old_size != 0)
+                        {
+                            return Marshal.ReAllocHGlobal(ptr, new_size);
+                        }
+                        else
+                        {
+                            return Marshal.AllocHGlobal(ptr, new_size);
+                        }
+                    }
+                }
+            "#,
+        );
+
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
 
         let generate_stub = |name: String, files: &mut Files| {
@@ -1099,11 +1128,13 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::F32Load { offset } => results.push(format!("returnArea.GetF32({offset})")),
             Instruction::F64Load { offset } => results.push(format!("returnArea.GetF64({offset})")),
 
-            Instruction::I32Store { offset } => results.push(format!("returnArea.SetS32({offset}, {}, {})",
-                    operands[1],
-                    operands[0]
-                )
-            ),
+            Instruction::I32Store { offset } => uwriteln!(
+                self.src, 
+                "returnArea.SetS32({}, {}, {})",
+                offset,
+                operands[1],
+                operands[0]
+                ),
             Instruction::I32Store8 { .. } => todo!("I32Store8"),
             Instruction::I32Store16 { .. } => todo!("I32Store16"),
             Instruction::I64Store { .. } => todo!("I64Store"),
