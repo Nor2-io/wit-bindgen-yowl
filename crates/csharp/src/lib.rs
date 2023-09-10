@@ -309,8 +309,24 @@ impl WorldGenerator for CSharp {
                 "#,
             )
         }
+        src.push_str("}");
+        src.push_str("\n");
 
-        src.push_str("}\n");
+        if(!&self.world_fragments.is_empty()){
+            src.push_str("\n");
+
+            src.push_str(&format!("public static class {name}ExportFuncs\n"));
+            src.push_str("{");
+
+            for (fragement) in &self.world_fragments {
+                src.push_str("\n");
+    
+                src.push_str(&fragement.csharp_interop_src);
+            }
+            src.push_str("}");
+        }
+
+        src.push_str("\n");
 
         src.push_str(
             r#"
@@ -407,9 +423,6 @@ impl WorldGenerator for CSharp {
             }
         }
 
-        if true {
-// add export and import functions that are not in interfaces
-        }
     }
 }
 

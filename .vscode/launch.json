@@ -735,12 +735,13 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "chsarp",
-                    "--",
-                    "numbers",
-                    "--F csharp",
                     "-p",
                     "wit-bindgen-cli",
+                    "--no-default-features",
+                    "-F",
+                    "csharp",
+                    "--",
+                    "strings",
                 ],
                 "filter": {
                     "name": "runtime",
