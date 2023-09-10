@@ -319,23 +319,25 @@ impl WorldGenerator for CSharp {
                     [UnmanagedCallersOnly]
                     internal static IntPtr cabi_realloc(IntPtr ptr, ulong old_size, ulong align, ulong new_size)
                     {
-                        if (new_size == 0) 
+                        if (new_size == 0)
                         {
                             if(old_size != 0)
                             {
-                                Marshal.Release(ptr)
+                                Marshal.Release(ptr);
                             }
-                            return (void*) align;
+                            return new IntPtr((int)align);
+                        }
+                
+                        if (new_size > int.MaxValue)
+                        {
+                            throw new ArgumentException("Cannot allocate more that int.MaxValue", nameof(new_size));
                         }
                         
                         if(old_size != 0)
                         {
-                            return Marshal.ReAllocHGlobal(ptr, new_size);
+                            return Marshal.ReAllocHGlobal(ptr, (int)new_size);
                         }
-                        else
-                        {
-                            return Marshal.AllocHGlobal(ptr, new_size);
-                        }
+                        return Marshal.AllocHGlobal((int)new_size);
                     }
                 }
             "#,
@@ -403,6 +405,10 @@ impl WorldGenerator for CSharp {
             if interface_type_and_fragments.is_export && self.opts.generate_stub {
                 generate_stub(format!("{name}"), files);
             }
+        }
+
+        if true {
+// add export and import functions that are not in interfaces
         }
     }
 }
