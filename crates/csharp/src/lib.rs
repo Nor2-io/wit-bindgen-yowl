@@ -28,6 +28,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Collections;
 using System.Runtime.InteropServices;
+using System.Text;
 
 ";
 
@@ -82,6 +83,7 @@ pub struct CSharp {
     return_area_align: usize,
     tuple_counts: HashSet<usize>,
     needs_result: bool,
+    needs_interop_string: bool,
     interface_fragments: HashMap<String, InterfaceTypeAndFragments>,
     world_fragments: Vec<InterfaceFragment>,
     sizes: SizeAlign,
@@ -94,7 +96,12 @@ impl CSharp {
         format!("{world}World.")
     }
 
-    fn interface<'a>(&'a mut self, resolve: &'a Resolve, name: &'a str) -> InterfaceGenerator<'a> {
+    fn interface<'a>(
+        &'a mut self, 
+        resolve: &'a Resolve, 
+        name: &'a str,
+        in_import: bool,
+    ) -> InterfaceGenerator<'a> {
         InterfaceGenerator {
             src: String::new(),
             csharp_interop_src: String::new(),
@@ -102,6 +109,7 @@ impl CSharp {
             gen: self,
             resolve,
             name,
+            in_import,
         }
     }
 
@@ -131,7 +139,7 @@ impl WorldGenerator for CSharp {
     ) {
         let name = interface_name(resolve, key, Direction::Import);
         self.interface_names.insert(id, name.clone());
-        let mut gen = self.interface(resolve, &name);
+        let mut gen = self.interface(resolve, &name, true);
         gen.types(id);
 
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -149,7 +157,7 @@ impl WorldGenerator for CSharp {
         _files: &mut Files,
     ) {
         let name = &format!("{}-world", resolve.worlds[world].name);
-        let mut gen = self.interface(resolve, name);
+        let mut gen = self.interface(resolve, name, true);
 
         for (_, func) in funcs {
             gen.import(name, func);
@@ -167,7 +175,7 @@ impl WorldGenerator for CSharp {
     ) -> Result<()> {
         let name = interface_name(resolve, key, Direction::Export);
         self.interface_names.insert(id, name.clone());
-        let mut gen = self.interface(resolve, &name);
+        let mut gen = self.interface(resolve, &name, false);
         gen.types(id);
 
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -186,7 +194,7 @@ impl WorldGenerator for CSharp {
         _files: &mut Files,
     ) -> Result<()> {
         let name = &format!("{}-world", resolve.worlds[world].name);
-        let mut gen = self.interface(resolve, name);
+        let mut gen = self.interface(resolve, name, false);
 
         for (_, func) in funcs {
             gen.export(func, None);
@@ -204,7 +212,7 @@ impl WorldGenerator for CSharp {
         _files: &mut Files,
     ) {
         let name = &format!("{}-world", resolve.worlds[world].name);
-        let mut gen = self.interface(resolve, name);
+        let mut gen = self.interface(resolve, name, true);
 
         for (ty_name, ty) in types {
             gen.define_type(ty_name, *ty);
@@ -309,8 +317,104 @@ impl WorldGenerator for CSharp {
                 "#,
             )
         }
+        src.push_str("}");
+        src.push_str("\n");
 
-        src.push_str("}\n");
+        if self.needs_interop_string {
+            src.push_str(r#"
+                public static class InteropString
+                {
+                    public static IntPtr FromString(string input)
+                    {
+                        var utf8Bytes = Encoding.UTF8.GetBytes(input);
+                        var gcHandle = GCHandle.Alloc(utf8Bytes, GCHandleType.Pinned);
+                        return gcHandle.AddrOfPinnedObject();
+                    }
+                }
+                "#
+            )
+        }
+
+        if(!&self.world_fragments.is_empty()){
+            src.push_str("\n");
+
+            src.push_str(&format!("public static class {name}ExportFuncs\n"));
+            src.push_str("{");
+
+            // Declare a statically-allocated return area, if needed. We only do
+            // this for export bindings, because import bindings allocate their
+            // return-area on the stack.
+            if self.return_area_size > 0 {
+                let mut ret_area_str = String::new();
+
+                uwrite!(
+                    ret_area_str,
+                    "
+                    [StructLayout(LayoutKind.Sequential, Pack = {})]
+                    private unsafe struct ReturnArea
+                    {{
+                        fixed byte Buffer[{}];
+    
+                        public void SetS32(int offset, int value)
+                        {{
+                            fixed (void* ptr = &Buffer[offset])
+                            {{
+                                BitConverter.TryWriteBytes(new Span<byte>(ptr, 4), value);
+                            }}
+                        }}
+                    }}
+    
+                    [ThreadStatic]
+                    private static ReturnArea returnArea = default;
+                    ",
+                    self.return_area_align,
+                    self.return_area_size,
+                );
+
+                src.push_str(&ret_area_str);
+            }
+    
+
+            for (fragement) in &self.world_fragments {
+                src.push_str("\n");
+    
+                src.push_str(&fragement.csharp_interop_src);
+            }
+            src.push_str("}");
+        }
+
+        src.push_str("\n");
+
+        src.push_str(
+            r#"
+                internal static class Intrinsics
+                {
+                    [UnmanagedCallersOnly]
+                    internal static IntPtr cabi_realloc(IntPtr ptr, uint old_size, uint align, uint new_size)
+                    {
+                        if (new_size == 0)
+                        {
+                            if(old_size != 0)
+                            {
+                                Marshal.Release(ptr);
+                            }
+                            return new IntPtr((int)align);
+                        }
+                
+                        if (new_size > int.MaxValue)
+                        {
+                            throw new ArgumentException("Cannot allocate more that int.MaxValue", nameof(new_size));
+                        }
+                        
+                        if(old_size != 0)
+                        {
+                            return Marshal.ReAllocHGlobal(ptr, (int)new_size);
+                        }
+                        return Marshal.AllocHGlobal((int)new_size);
+                    }
+                }
+            "#,
+        );
 
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
 
@@ -375,6 +479,7 @@ impl WorldGenerator for CSharp {
                 generate_stub(format!("{name}"), files);
             }
         }
+
     }
 }
 
@@ -385,6 +490,7 @@ struct InterfaceGenerator<'a> {
     gen: &'a mut CSharp,
     resolve: &'a Resolve,
     name: &'a str,
+    in_import: bool,
 }
 
 impl InterfaceGenerator<'_> {
@@ -446,7 +552,7 @@ impl InterfaceGenerator<'_> {
             &mut bindgen,
         );
 
-        let sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
+        let _sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
 
         let result_type: String = match func.results.len() {
             0 => "void".to_string(),
@@ -551,8 +657,14 @@ impl InterfaceGenerator<'_> {
             self.csharp_interop_src,
             r#"
             [UnmanagedCallersOnly(EntryPoint = "{export_name}")]
-            internal static {wasm_result_type} {interop_name}({wasm_params}) {{
+            public static {wasm_result_type} {interop_name}({wasm_params}) {{
+                Console.WriteLine("{export_name}");
                 {src}
+            }}
+
+            [UnmanagedCallersOnly(EntryPoint = "cabi_post_{export_name}")]
+            public static void cabi_post_{interop_name}({wasm_result_type} returnValue) {{
+                Console.WriteLine("cabi_post_{export_name}");
             }}
             "#
         );
@@ -1099,7 +1211,12 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::F32Load { offset } => results.push(format!("returnArea.GetF32({offset})")),
             Instruction::F64Load { offset } => results.push(format!("returnArea.GetF64({offset})")),
 
-            Instruction::I32Store { .. } => todo!("I32Store"),
+            Instruction::I32Store { offset } => uwriteln!(
+                self.src, 
+                "returnArea.SetS32({}, {});",
+                offset,
+                operands[0]
+                ),
             Instruction::I32Store8 { .. } => todo!("I32Store8"),
             Instruction::I32Store16 { .. } => todo!("I32Store16"),
             Instruction::I64Store { .. } => todo!("I64Store"),
@@ -1191,18 +1308,24 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::StringLower { realloc } => {
                 let op = &operands[0];
                 let interop_string = self.locals.tmp("interopString");
+                let resultVar = self.locals.tmp("result");
                 uwriteln!(
                     self.src,
-                    "InteropString {interop_string} = InteropString.FromString({op});"
+                    "
+                    var {resultVar} = {op};
+                    var length = {resultVar}.Length;
+                    IntPtr {interop_string} = InteropString.FromString({resultVar});"
                 );
 
                 //TODO: Oppertunity to optimize and not reallocate every call
                 if realloc.is_none() {
-                    results.push(format!("ref {interop_string}"));
+                    results.push(format!("{interop_string}.ToInt32()"));
                 } else {
-                    results.push(format!("ref {interop_string}"));
+                    results.push(format!("{interop_string}.ToInt32()"));
                 }
-                results.push(format!(""));
+                results.push(format!("length"));
+
+                self.gen.gen.needs_interop_string = true;
             }
 
             Instruction::StringLift { .. } => {
@@ -1256,16 +1379,6 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                     .resolve()
                     .wasm_signature(AbiVariant::GuestExport, func);
 
-                let wasm_cast = sig
-                    .results
-                    .iter()
-                    .map(|param| {
-                        let ty = wasm_type(*param);
-                        format!("({ty})")
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
                 let params_cast = func
                     .params
                     .iter()
@@ -1292,8 +1405,8 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                     0 => self
                         .src
                         .push_str(&format!("{class_name}Impl.{func_name}({oper});")),
-                    1 => results.push(format!("{wasm_cast}{class_name}Impl.{func_name}({oper})")),
-                    _ => results.push(format!("({wasm_cast}){class_name}Impl.{func_name}({oper})")),
+                    1 => results.push(format!("{class_name}Impl.{func_name}({oper})")),
+                    _ => results.push(format!("{class_name}Impl.{func_name}({oper})")),
                 }
             }
 
@@ -1329,9 +1442,32 @@ impl Bindgen for FunctionBindgen<'_, '_> {
     }
 
     fn return_pointer(&mut self, size: usize, align: usize) -> String {
+        let ptr = self.locals.tmp("ptr");
+
+        // Use a stack-based return area for imports, because exports need
+        // their return area to be live until the post-return call.
+        // if self.gen.in_import {
+        //     self.import_return_pointer_area_size = self.import_return_pointer_area_size.max(size);
+        //     self.import_return_pointer_area_align =
+        //         self.import_return_pointer_area_align.max(align);
+        //     uwriteln!(self.src, "int32_t {} = (int32_t) &ret_area;", ptr);
+        // } else {
+        //     self.gen.gen.return_pointer_area_size = self.gen.gen.return_pointer_area_size.max(size);
+        //     self.gen.gen.return_pointer_area_align =
+        //         self.gen.gen.return_pointer_area_align.max(align);
+        //     // Declare a statically-allocated return area.
+        //     uwriteln!(self.src, "int32_t {} = (int32_t) &RET_AREA;", ptr);
+        // }
+
         self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
         self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
-        format!("{}RETURN_AREA", self.gen.gen.qualifier())
+
+        writeln!(self.src, "
+            var gcHandle = GCHandle.Alloc(returnArea, GCHandleType.Pinned);
+            var {} = gcHandle.AddrOfPinnedObject();
+            ", ptr);
+
+        format!("{ptr}.ToInt32()")
     }
 
     fn push_block(&mut self) {

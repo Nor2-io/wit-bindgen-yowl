@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use heck::ToUpperCamelCase;
+use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -8,7 +9,7 @@ use std::process::Command;
 use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::preview2::{Table, WasiCtx, WasiCtxBuilder, WasiView};
-use wit_component::ComponentEncoder;
+use wit_component::{ComponentEncoder, StringEncoding};
 use wit_parser::Resolve;
 
 mod flavorful;
@@ -594,6 +595,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
       <RootNamespace>{assembly_name}</RootNamespace>
       <ImplicitUsings>enable</ImplicitUsings>
       <Nullable>enable</Nullable>
+      <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     
     <PropertyGroup>
