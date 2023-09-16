@@ -321,14 +321,24 @@ impl WorldGenerator for CSharp {
         src.push_str("\n");
 
         if self.needs_interop_string {
+
+            // TODO: CallContext UTF16/latin
+
             src.push_str(r#"
-                public static class InteropString
+                public static unsafe class InteropString
                 {
-                    public static IntPtr FromString(string input)
+                    public static nint FromString(string input, out int length)
                     {
                         var utf8Bytes = Encoding.UTF8.GetBytes(input);
+                        length = utf8Bytes.Length;
                         var gcHandle = GCHandle.Alloc(utf8Bytes, GCHandleType.Pinned);
                         return gcHandle.AddrOfPinnedObject();
+                    }
+
+                    public static string GetUTF8String(int p0, int p1)
+                    {
+                        var s = Encoding.UTF8.GetString((byte*)p0, p1);
+                        return Encoding.UTF8.GetString((byte*)p0, p1);
                     }
                 }
                 "#
@@ -350,25 +360,25 @@ impl WorldGenerator for CSharp {
                 uwrite!(
                     ret_area_str,
                     "
+                    [InlineArray({})]
                     [StructLayout(LayoutKind.Sequential, Pack = {})]
-                    private unsafe struct ReturnArea
+                    private struct ReturnArea
                     {{
-                        fixed byte Buffer[{}];
+                        private byte buffer0;
     
                         public void SetS32(int offset, int value)
                         {{
-                            fixed (void* ptr = &Buffer[offset])
-                            {{
-                                BitConverter.TryWriteBytes(new Span<byte>(ptr, 4), value);
-                            }}
+                            Span<byte> span = this;
+
+                            BitConverter.TryWriteBytes(span.Slice(offset), value);
                         }}
                     }}
     
                     [ThreadStatic]
-                    private static ReturnArea returnArea = default;
+                    private static ReturnArea returnArea;
                     ",
-                    self.return_area_align,
                     self.return_area_size,
+                    self.return_area_align,
                 );
 
                 src.push_str(&ret_area_str);
@@ -389,7 +399,7 @@ impl WorldGenerator for CSharp {
             r#"
                 internal static class Intrinsics
                 {
-                    [UnmanagedCallersOnly]
+                    [UnmanagedCallersOnly(EntryPoint = "cabi_realloc")]
                     internal static IntPtr cabi_realloc(IntPtr ptr, uint old_size, uint align, uint new_size)
                     {
                         if (new_size == 0)
@@ -657,17 +667,23 @@ impl InterfaceGenerator<'_> {
             self.csharp_interop_src,
             r#"
             [UnmanagedCallersOnly(EntryPoint = "{export_name}")]
-            public static {wasm_result_type} {interop_name}({wasm_params}) {{
-                Console.WriteLine("{export_name}");
+            public static unsafe {wasm_result_type} {interop_name}({wasm_params}) {{
                 {src}
-            }}
-
-            [UnmanagedCallersOnly(EntryPoint = "cabi_post_{export_name}")]
-            public static void cabi_post_{interop_name}({wasm_result_type} returnValue) {{
-                Console.WriteLine("cabi_post_{export_name}");
             }}
             "#
         );
+
+        if sig.results.len() > 0 {
+            uwrite!(
+                self.csharp_interop_src,
+                r#"
+                [UnmanagedCallersOnly(EntryPoint = "cabi_post_{export_name}")]
+                public static void cabi_post_{interop_name}({wasm_result_type} returnValue) {{
+                    Console.WriteLine("cabi_post_{export_name}");
+                }}
+                "#
+            );
+        }
 
         if self.gen.opts.generate_stub {
             let sig = self.sig_string(func, true);
@@ -1313,8 +1329,8 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                     self.src,
                     "
                     var {resultVar} = {op};
-                    var length = {resultVar}.Length;
-                    IntPtr {interop_string} = InteropString.FromString({resultVar});"
+                    IntPtr {interop_string} = InteropString.FromString({resultVar}, out int length);
+                    "
                 );
 
                 //TODO: Oppertunity to optimize and not reallocate every call
@@ -1332,7 +1348,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                 let address = &operands[0];
                 let length = &operands[1];
 
-                results.push(format!("returnArea.GetUTF8String({address}, {length})"));
+                results.push(format!("InteropString.GetUTF8String({address}, {length})"));
             }
 
             Instruction::ListLower { .. } => todo!("ListLower"),
@@ -1462,12 +1478,13 @@ impl Bindgen for FunctionBindgen<'_, '_> {
         self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
         self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
 
+        //TODO: as this is static do we need to pin it?
         writeln!(self.src, "
             var gcHandle = GCHandle.Alloc(returnArea, GCHandleType.Pinned);
-            var {} = gcHandle.AddrOfPinnedObject();
+            var {} = Unsafe.AsPointer(ref returnArea);
             ", ptr);
 
-        format!("{ptr}.ToInt32()")
+        format!("(int){ptr}")
     }
 
     fn push_block(&mut self) {

@@ -1,14 +1,12 @@
 package foo:foo
 
-//interface strings {
-//  a: func(x: string)
-//  b: func() -> string
-//  c: func(a: string, b: string) -> string
-//}
+interface strings {
+  a: func(x: string)
+  b: func() -> string
+  c: func(a: string, b: string) -> string
+}
 
 world the-world {
-//  import strings
-  export test-imports: func()
-  export return-empty: func() -> string
-//  export roundtrip: func(s: string) -> string
+  import strings
+  export strings
 }

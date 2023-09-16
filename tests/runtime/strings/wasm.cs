@@ -23,6 +23,12 @@ public class StringsWorldImpl
     {
         return "";
     }
+
+    public static string Roundtrip(string input)
+    {
+        Console.WriteLine($"Roundtrip {input}");
+        return input;
+    }
 }
 
 // public class TestImpl : ITest
