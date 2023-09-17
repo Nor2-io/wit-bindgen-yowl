@@ -1,22 +1,19 @@
-using System.Runtime.InteropServices;
+using System;
+using System.Diagnostics;
+using wit_strings.Wit.imports.test.strings.Imports;
 
 namespace wit_strings;
 
-using System;
-using System.Diagnostics;
-
-
 public class StringsWorldImpl : StringsWorld
 {
-    //TODO move to generated code
-    [UnmanagedCallersOnly(EntryPoint = "test-imports")]
-    public static void TestImportsExport()
-    {
-        TestImports();
-    }
-
     public static void TestImports()
     {
+        Debug.Assert(ReturnEmpty() == "");
+        Debug.Assert(Roundtrip("a") == "a");
+        Debug.Assert(Roundtrip("🚀🚀🚀 𠈄𓀀") == "🚀🚀🚀 𠈄𓀀");
+
+        ImportsInterop.TakeBasic("latin utf16");
+        Debug.Assert(ImportsInterop.ReturnUnicode() == "🚀🚀🚀 𠈄𓀀");
     }
 
     public static string ReturnEmpty()
