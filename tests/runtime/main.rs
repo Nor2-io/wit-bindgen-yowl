@@ -657,9 +657,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
                 <CustomLinkerArg Include="-Wl,--export,_initialize" />
                 <CustomLinkerArg Include="-Wl,--no-entry" />
                 <CustomLinkerArg Include="-mexec-model=reactor" />
-        
-                <CustomLinkerArg Include="-Wl,--export,test:strings/imports!take-basic" />
-                <CustomLinkerArg Include="-Wl,--export,test:strings/imports!return-unicode" />
 
                 <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
                 <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />

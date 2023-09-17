@@ -585,7 +585,30 @@ impl InterfaceGenerator<'_> {
             &mut bindgen,
         );
 
-        let _sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
+        //TODO: The below is needed for non basic types as we need to load the string into memory directly instead of trying to return the complex type
+        //let sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
+        //
+        //let result_type: String = match sig.results.len() {
+        //    0 => "void".to_string(),
+        //    1 => {
+        //        let ty = sig.results.iter().next().unwrap();
+        //        wasm_type(*ty).to_owned()
+        //    }
+        //    _ => unreachable!(), //TODO
+        //};
+        //
+        //let camel_name = func.name.to_upper_camel_case();
+        //
+        //let params = sig
+        //    .params
+        //    .iter()
+        //    .enumerate()
+        //    .map(|(i, param)| {
+        //        let ty = wasm_type(*param);
+        //        format!("{ty} p{i}")
+        //    })
+        //    .collect::<Vec<_>>()
+        //    .join(", ");
 
         let result_type: String = match func.results.len() {
             0 => "void".to_string(),
@@ -1352,13 +1375,13 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::StringLower { realloc } => {
                 let op = &operands[0];
                 let interop_string = self.locals.tmp("interopString");
-                let resultVar = self.locals.tmp("result");
+                let result_var = self.locals.tmp("result");
                 uwriteln!(
                     self.src,
                     "
-                    var {resultVar} = {op};
-                    var length = {resultVar}.Length;
-                    IntPtr {interop_string} = InteropString.FromString({resultVar});"
+                    var {result_var} = {op};
+                    var length = {result_var}.Length;
+                    IntPtr {interop_string} = InteropString.FromString({result_var});"
                 );
 
                 //TODO: Oppertunity to optimize and not reallocate every call
