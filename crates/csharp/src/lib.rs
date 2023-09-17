@@ -397,7 +397,7 @@ impl WorldGenerator for CSharp {
             r#"
                 internal static class Intrinsics
                 {
-                    [UnmanagedCallersOnly]
+                    [UnmanagedCallersOnly(EntryPoint = "cabi_realloc")]
                     internal static IntPtr cabi_realloc(IntPtr ptr, uint old_size, uint align, uint new_size)
                     {
                         if (new_size == 0)
