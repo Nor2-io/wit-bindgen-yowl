@@ -54,9 +54,9 @@ public class NumbersWorldImpl : NumbersWorld
         Debug.Assert(TestImpl.RoundtripFloat64(Double.NegativeInfinity) == Double.NegativeInfinity);
         Debug.Assert(double.IsNaN(TestImpl.RoundtripFloat64(Double.NaN)));
 
-        // Debug.Assert(TestImpl.RoundtripChar('a') == 'a');
-        // Debug.Assert(TestImpl.RoundtripChar(' ') == ' ');
-        // Debug.Assert(TestImpl.RoundtripChar("🚩"[0]) == "🚩"[0]);
+        Debug.Assert(TestImpl.RoundtripChar('a') == 'a');
+        Debug.Assert(TestImpl.RoundtripChar(' ') == ' ');
+        Debug.Assert(TestImpl.RoundtripChar("🚩"[0]) == "🚩"[0]);
 
         TestImpl.SetScalar(2);
         Debug.Assert(TestImpl.GetScalar() == 2);
