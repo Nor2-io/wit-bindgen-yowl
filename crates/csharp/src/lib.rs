@@ -233,7 +233,7 @@ impl WorldGenerator for CSharp {
 
         uwrite!(
             src,
-            "namespace {namespace};
+            "namespace {namespace} {{
 
              {CSHARP_IMPORTS}
 
@@ -338,7 +338,8 @@ impl WorldGenerator for CSharp {
         if !&self.world_fragments.is_empty() {
             src.push_str("\n");
 
-            src.push_str(&format!("public static class {name}ExportFuncs\n"));
+            src.push_str("namespace exports {\n");
+            src.push_str(&format!("public static class {name}World\n"));
             src.push_str("{");
 
             // Declare a statically-allocated return area, if needed. We only do
@@ -387,7 +388,8 @@ impl WorldGenerator for CSharp {
 
                 src.push_str(&fragement.csharp_interop_src);
             }
-            src.push_str("}");
+            src.push_str("}\n");
+            src.push_str("}\n");
         }
 
         src.push_str("\n");
@@ -422,6 +424,8 @@ impl WorldGenerator for CSharp {
                 }
             "#,
         );
+
+        src.push_str("}\n");
 
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
 

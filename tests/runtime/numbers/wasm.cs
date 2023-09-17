@@ -10,13 +10,6 @@ namespace wit_numbers;
 
 public class NumbersWorldImpl : NumbersWorld
 {
-    //TODO move to generated code
-    [UnmanagedCallersOnly(EntryPoint = "test-imports")]
-    public static void TestImportsExport()
-    {
-        TestImports();
-    }
-
     public static void TestImports()
     {
         Debug.Assert(TestImpl.RoundtripU8(1) == 1);
