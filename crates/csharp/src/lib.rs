@@ -12,9 +12,9 @@ use wit_bindgen_core::abi::{self, AbiVariant, Bindgen, Instruction, LiftLower, W
 use wit_bindgen_core::{
     uwrite, uwriteln,
     wit_parser::{
-        Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record,
-        Resolve, Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
-        Variant, WorldId, WorldKey,
+        Docs, Enum, Flags, FlagsRepr, Function, FunctionKind, Int, InterfaceId, Record, Resolve,
+        Result_, SizeAlign, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId,
+        WorldKey,
     },
     Files, InterfaceGenerator as _, Ns, WorldGenerator,
 };
@@ -97,8 +97,8 @@ impl CSharp {
     }
 
     fn interface<'a>(
-        &'a mut self, 
-        resolve: &'a Resolve, 
+        &'a mut self,
+        resolve: &'a Resolve,
         name: &'a str,
         in_import: bool,
     ) -> InterfaceGenerator<'a> {
@@ -321,7 +321,8 @@ impl WorldGenerator for CSharp {
         src.push_str("\n");
 
         if self.needs_interop_string {
-            src.push_str(r#"
+            src.push_str(
+                r#"
                 public static class InteropString
                 {
                     public static IntPtr FromString(string input)
@@ -331,11 +332,11 @@ impl WorldGenerator for CSharp {
                         return gcHandle.AddrOfPinnedObject();
                     }
                 }
-                "#
+                "#,
             )
         }
 
-        if(!&self.world_fragments.is_empty()){
+        if (!&self.world_fragments.is_empty()) {
             src.push_str("\n");
 
             src.push_str(&format!("public static class {name}ExportFuncs\n"));
@@ -373,11 +374,10 @@ impl WorldGenerator for CSharp {
 
                 src.push_str(&ret_area_str);
             }
-    
 
             for (fragement) in &self.world_fragments {
                 src.push_str("\n");
-    
+
                 src.push_str(&fragement.csharp_interop_src);
             }
             src.push_str("}");
@@ -479,7 +479,6 @@ impl WorldGenerator for CSharp {
                 generate_stub(format!("{name}"), files);
             }
         }
-
     }
 }
 
@@ -661,13 +660,20 @@ impl InterfaceGenerator<'_> {
                 Console.WriteLine("{export_name}");
                 {src}
             }}
-
-            [UnmanagedCallersOnly(EntryPoint = "cabi_post_{export_name}")]
-            public static void cabi_post_{interop_name}({wasm_result_type} returnValue) {{
-                Console.WriteLine("cabi_post_{export_name}");
-            }}
             "#
         );
+
+        if !sig.results.is_empty() {
+            uwrite!(
+                self.csharp_interop_src,
+                r#"
+                [UnmanagedCallersOnly(EntryPoint = "cabi_post_{export_name}")]
+                public static void cabi_post_{interop_name}({wasm_result_type} returnValue) {{
+                    Console.WriteLine("cabi_post_{export_name}");
+                }}
+                "#
+            );
+        }
 
         if self.gen.opts.generate_stub {
             let sig = self.sig_string(func, true);
@@ -1211,12 +1217,9 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             Instruction::F32Load { offset } => results.push(format!("returnArea.GetF32({offset})")),
             Instruction::F64Load { offset } => results.push(format!("returnArea.GetF64({offset})")),
 
-            Instruction::I32Store { offset } => uwriteln!(
-                self.src, 
-                "returnArea.SetS32({}, {});",
-                offset,
-                operands[0]
-                ),
+            Instruction::I32Store { offset } => {
+                uwriteln!(self.src, "returnArea.SetS32({}, {});", offset, operands[0])
+            }
             Instruction::I32Store8 { .. } => todo!("I32Store8"),
             Instruction::I32Store16 { .. } => todo!("I32Store16"),
             Instruction::I64Store { .. } => todo!("I64Store"),
@@ -1462,10 +1465,14 @@ impl Bindgen for FunctionBindgen<'_, '_> {
         self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
         self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
 
-        writeln!(self.src, "
+        writeln!(
+            self.src,
+            "
             var gcHandle = GCHandle.Alloc(returnArea, GCHandleType.Pinned);
             var {} = gcHandle.AddrOfPinnedObject();
-            ", ptr);
+            ",
+            ptr
+        );
 
         format!("{ptr}.ToInt32()")
     }

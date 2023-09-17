@@ -1,9 +1,9 @@
-use anyhow::Result;
 use crate::TestConfigurer;
 use crate::Wasi;
-use wasmtime::Store;
+use anyhow::Result;
 use wasmtime::component::__internal::async_trait;
-use wasmtime::component::{Component, Linker, Instance};
+use wasmtime::component::{Component, Instance, Linker};
+use wasmtime::Store;
 
 wasmtime::component::bindgen!({
     path : "tests/runtime/strings",
@@ -15,39 +15,44 @@ pub struct MyImports;
 
 #[async_trait]
 impl test::strings::imports::Host for MyImports {
-    // async fn take_basic(&mut self, s: String) -> Result<()> {
-    //     assert_eq!(s, "latin utf16");
-    //     Ok(())
-    // }
+    async fn take_basic(&mut self, s: String) -> Result<()> {
+        assert_eq!(s, "latin utf16");
+        Ok(())
+    }
 
-    // async fn return_unicode(&mut self) -> Result<String> {
-    //     Ok("🚀🚀🚀 𠈄𓀀".to_string())
-    // }
+    async fn return_unicode(&mut self) -> Result<String> {
+        Ok("🚀🚀🚀 𠈄𓀀".to_string())
+    }
 }
 
-struct StringsConfigurer{
-}
+struct StringsConfigurer {}
 
 #[async_trait]
 impl TestConfigurer<MyImports, Strings> for StringsConfigurer {
-    async fn instantiate_async(&self, store: &mut Store<Wasi<MyImports>>, component: &Component, linker: &Linker<Wasi<MyImports>>) -> Result<(Strings, Instance)> {
+    async fn instantiate_async(
+        &self,
+        store: &mut Store<Wasi<MyImports>>,
+        component: &Component,
+        linker: &Linker<Wasi<MyImports>>,
+    ) -> Result<(Strings, Instance)> {
         Strings::instantiate_async(store, component, linker).await
     }
 
-    async fn test(&self, exports: Strings, store: &mut Store<Wasi<MyImports>>) -> Result<()>{
+    async fn test(&self, exports: Strings, store: &mut Store<Wasi<MyImports>>) -> Result<()> {
         run_test(exports, store).await
     }
 }
 
 #[tokio::test]
 async fn run() -> Result<()> {
-    let configurer = StringsConfigurer{};
+    let configurer = StringsConfigurer {};
 
     crate::run_test(
         "strings",
         |linker| Strings::add_to_linker(linker, |x| &mut x.0),
         configurer,
-    ).await
+    )
+    .await
 }
 
 async fn run_test(exports: Strings, store: &mut Store<crate::Wasi<MyImports>>) -> Result<()> {
