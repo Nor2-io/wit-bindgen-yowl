@@ -363,6 +363,14 @@ impl WorldGenerator for CSharp {
                                 BitConverter.TryWriteBytes(new Span<byte>(ptr, 4), value);
                             }}
                         }}
+
+                        public string GetUTF8String(int offset, int byteLength)
+                        {{
+                            fixed (void* ptr = &Buffer[offset])
+                            {{
+                                return Marshal.PtrToStringUTF8(new IntPtr(ptr));
+                            }}
+                        }}
                     }}
     
                     [ThreadStatic]

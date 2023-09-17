@@ -23,6 +23,11 @@ public class StringsWorldImpl
     {
         return "";
     }
+
+    public static string Roundtrip(string t)
+    {
+        return t;
+    }
 }
 
 // public class TestImpl : ITest
