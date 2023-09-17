@@ -6,7 +6,7 @@ using System;
 using System.Diagnostics;
 
 
-public class StringsWorldImpl
+public class StringsWorldImpl : StringsWorld
 {
     //TODO move to generated code
     [UnmanagedCallersOnly(EntryPoint = "test-imports")]
