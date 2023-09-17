@@ -626,10 +626,13 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         ));
         csproj.push_str("\t</ItemGroup>\n\n");
 
-        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers and strings)
         csproj.push_str(
             r#"
             <ItemGroup>
+                <WasmImport Include="test:strings/imports!take-basic" />
+                <WasmImport Include="test:strings/imports!return-unicode" />
+
                 <WasmImport Include="test:numbers/test!roundtrip-u8" />
                 <WasmImport Include="test:numbers/test!roundtrip-s8" />
                 <WasmImport Include="test:numbers/test!roundtrip-u16" />
@@ -647,7 +650,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             "#,
         );
 
-        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers and strings)
         csproj.push_str(
             r#"
             <ItemGroup>
@@ -655,6 +658,9 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
                 <CustomLinkerArg Include="-Wl,--no-entry" />
                 <CustomLinkerArg Include="-mexec-model=reactor" />
         
+                <CustomLinkerArg Include="-Wl,--export,test:strings/imports!take-basic" />
+                <CustomLinkerArg Include="-Wl,--export,test:strings/imports!return-unicode" />
+
                 <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
                 <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
                 <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
