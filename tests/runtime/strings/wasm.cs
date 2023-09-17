@@ -24,13 +24,8 @@ public class StringsWorldImpl
         return "";
     }
 
-    public static string Roundtrip(string t)
+    public static string Roundtrip(string s)
     {
-        return t;
+        return s;
     }
 }
-
-// public class TestImpl : ITest
-// {
-
-// }
