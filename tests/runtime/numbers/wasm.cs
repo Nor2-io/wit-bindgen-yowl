@@ -9,7 +9,7 @@ using System.Diagnostics;
 using wit_numbers.Wit.imports.test.numbers.Test;
 
 
-public class NumbersImpl : NumbersWorld
+public class NumbersWorldImpl : NumbersWorld
 {
     //TODO move to generated code
     [UnmanagedCallersOnly(EntryPoint = "test-imports")]
@@ -79,66 +79,66 @@ public class TestImpl
 
     public static byte RoundtripU8(byte p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripU8(p0);
+        return p0;
     }
 
     public static sbyte RoundtripS8(sbyte p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripS8(p0);
+        return p0;
     }
 
     public static ushort RoundtripU16(ushort p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripU16(p0);
+        return p0;
     }
 
     public static short RoundtripS16(short p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripS16(p0);
+        return p0;
     }
 
     public static uint RoundtripU32(uint p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripU32(p0);
+        return p0;
     }
 
     public static int RoundtripS32(int p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripS32(p0);
+        return p0;
     }
 
     public static ulong RoundtripU64(ulong p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripU64(p0);
+        return p0;
     }
 
     public static long RoundtripS64(long p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripS64(p0);
+        return p0;
     }
 
     public static float RoundtripFloat32(float p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripFloat32(p0);
+        return p0;
     }
 
     public static double RoundtripFloat64(double p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripFloat64(p0);
+        return p0;
     }
 
     public static uint RoundtripChar(uint p0)
     {
-        return Wit.imports.test.numbers.Test.TestInterop.RoundtripChar(p0);
+        return p0;
     }
 
     public static void SetScalar(uint p0)
     {
-        Wit.imports.test.numbers.Test.TestInterop.SetScalar(p0);
+        SCALAR = p0;
     }
 
     public static uint GetScalar()
     {
-        return Wit.imports.test.numbers.Test.TestInterop.GetScalar();
+        return SCALAR;
     }
 }

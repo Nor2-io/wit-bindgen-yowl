@@ -592,6 +592,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
 
     <PropertyGroup>
       <TargetFramework>net8.0</TargetFramework>
+      <LangVersion>preview</LangVersion>
       <RootNamespace>{assembly_name}</RootNamespace>
       <ImplicitUsings>enable</ImplicitUsings>
       <Nullable>enable</Nullable>
@@ -605,14 +606,11 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
     "
         );
 
-        //csproj.push_str("<ItemGroup>\n");
-
         for (file, contents) in files.iter() {
             let dst = out_dir.join(file);
             fs::write(dst, contents).unwrap();
         }
 
-        //csproj.push_str("</ItemGroup>\n\n");
         csproj.push_str(
             r#"
     <ItemGroup>
@@ -627,50 +625,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             "\t\t<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
         ));
         csproj.push_str("\t</ItemGroup>\n\n");
-
-        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
-        csproj.push_str(
-            r#"
-    <ItemGroup>
-        <WasmImport Include="test:numbers/test!roundtrip-u8" />
-        <WasmImport Include="test:numbers/test!roundtrip-s8" />
-        <WasmImport Include="test:numbers/test!roundtrip-u16" />
-        <WasmImport Include="test:numbers/test!roundtrip-s16" />
-        <WasmImport Include="test:numbers/test!roundtrip-u32" />
-        <WasmImport Include="test:numbers/test!roundtrip-s32" />
-        <WasmImport Include="test:numbers/test!roundtrip-u64" />
-        <WasmImport Include="test:numbers/test!roundtrip-s64" />
-        <WasmImport Include="test:numbers/test!roundtrip-float32" />
-        <WasmImport Include="test:numbers/test!roundtrip-float64" />
-        <WasmImport Include="test:numbers/test!roundtrip-char" />
-        <WasmImport Include="test:numbers/test!set-scalar" />
-        <WasmImport Include="test:numbers/test!get-scalar" />
-    </ItemGroup>
-            "#,
-        );
-
-        //TODO: Is this handled by the source generator? (Temporary just to test with numbers)
-        csproj.push_str(
-            r#"
-    <ItemGroup>
-        <CustomLinkerArg Include="-Wl,--export,_initialize" />
-    
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
-        <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
-    </ItemGroup>
-            "#,
-        );
 
         csproj.push_str(
             r#"

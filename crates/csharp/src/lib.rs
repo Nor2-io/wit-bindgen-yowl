@@ -664,7 +664,7 @@ impl InterfaceGenerator<'_> {
             self.csharp_interop_src,
             r#"
             [UnmanagedCallersOnly(EntryPoint = "{export_name}")]
-            public static {wasm_result_type} {interop_name}({wasm_params}) {{
+            public static {result_type} {interop_name}({wasm_params}) {{
                 Console.WriteLine("{export_name}");
                 {src}
             }}
