@@ -337,7 +337,6 @@ impl WorldGenerator for CSharp {
 
                     public static string GetUTF8String(int p0, int p1)
                     {
-                        var s = Encoding.UTF8.GetString((byte*)p0, p1);
                         return Encoding.UTF8.GetString((byte*)p0, p1);
                     }
                 }

@@ -1,13 +1,21 @@
 use anyhow::Result;
+use crate::Wasi;
 use wasmtime::Store;
+use wasmtime::component::__internal::async_trait;
+use wasmtime::component::{Component, Linker, Instance};
+use crate::TestConfigurer;
 
-wasmtime::component::bindgen!(in "tests/runtime/many_arguments");
+wasmtime::component::bindgen!({
+    path : "tests/runtime/many_arguments",
+    async: true,
+});
 
 #[derive(Default)]
 pub struct MyImports {}
 
+#[async_trait]
 impl imports::Host for MyImports {
-    fn many_arguments(
+    async fn many_arguments(
         &mut self,
         a1: u64,
         a2: u64,
@@ -46,18 +54,32 @@ impl imports::Host for MyImports {
     }
 }
 
-#[test]
-fn run() -> Result<()> {
-    // crate::run_test(
-    //     "many_arguments",
-    //     |linker| ManyArguments::add_to_linker(linker, |x| &mut x.0),
-    //     |store, component, linker| ManyArguments::instantiate(store, component, linker),
-    //     run_test,
-    // )
-    Ok(())
+struct ManyArgumentsConfigurer{
 }
 
-fn run_test(exports: ManyArguments, store: &mut Store<crate::Wasi<MyImports>>) -> Result<()> {
+#[async_trait]
+impl TestConfigurer<MyImports, ManyArguments> for ManyArgumentsConfigurer {
+    async fn instantiate_async(&self, store: &mut Store<Wasi<MyImports>>, component: &Component, linker: &Linker<Wasi<MyImports>>) -> Result<(ManyArguments, Instance)> {
+        ManyArguments::instantiate_async(store, component, linker).await
+    }
+
+    async fn test(&self, exports: ManyArguments, store: &mut Store<Wasi<MyImports>>) -> Result<()>{
+        run_test(exports, store).await
+    }
+}
+
+#[tokio::test]
+async fn run() -> Result<()> {
+    let configurer = ManyArgumentsConfigurer{};
+
+    crate::run_test(
+        "many_arguments",
+        |linker| ManyArguments::add_to_linker(linker, |x| &mut x.0),
+        configurer,
+    ).await
+}
+
+async fn run_test(exports: ManyArguments, store: &mut Store<crate::Wasi<MyImports>>) -> Result<()> {
     exports.call_many_arguments(
         &mut *store,
         1,
@@ -76,7 +98,7 @@ fn run_test(exports: ManyArguments, store: &mut Store<crate::Wasi<MyImports>>) -
         14,
         15,
         16,
-    )?;
+    ).await?;
 
     Ok(())
 }
