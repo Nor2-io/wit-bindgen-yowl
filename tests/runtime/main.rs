@@ -650,6 +650,55 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         ));
         csproj.push_str("\t</ItemGroup>\n\n");
 
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers and strings)
+        csproj.push_str(
+            r#"
+            <ItemGroup>
+                <WasmImport Include="test:strings/imports!take-basic" />
+                <WasmImport Include="test:strings/imports!return-unicode" />
+
+                <WasmImport Include="test:numbers/test!roundtrip-u8" />
+                <WasmImport Include="test:numbers/test!roundtrip-s8" />
+                <WasmImport Include="test:numbers/test!roundtrip-u16" />
+                <WasmImport Include="test:numbers/test!roundtrip-s16" />
+                <WasmImport Include="test:numbers/test!roundtrip-u32" />
+                <WasmImport Include="test:numbers/test!roundtrip-s32" />
+                <WasmImport Include="test:numbers/test!roundtrip-u64" />
+                <WasmImport Include="test:numbers/test!roundtrip-s64" />
+                <WasmImport Include="test:numbers/test!roundtrip-float32" />
+                <WasmImport Include="test:numbers/test!roundtrip-float64" />
+                <WasmImport Include="test:numbers/test!roundtrip-char" />
+                <WasmImport Include="test:numbers/test!set-scalar" />
+                <WasmImport Include="test:numbers/test!get-scalar" />
+            </ItemGroup>
+            "#,
+        );
+
+        //TODO: Is this handled by the source generator? (Temporary just to test with numbers and strings)
+        csproj.push_str(
+            r#"
+            <ItemGroup>
+                <CustomLinkerArg Include="-Wl,--export,_initialize" />
+                <CustomLinkerArg Include="-Wl,--no-entry" />
+                <CustomLinkerArg Include="-mexec-model=reactor" />
+
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u8" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s8" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u16" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s16" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-u64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-s64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float32" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-float64" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!roundtrip-char" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!set-scalar" />
+                <CustomLinkerArg Include="-Wl,--export,test:numbers/test!get-scalar" />
+            </ItemGroup>
+            "#,
+        );
+
         csproj.push_str(
             r#"
     <ItemGroup>
