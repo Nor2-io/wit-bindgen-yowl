@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use heck::ToUpperCamelCase;
+use heck::*;
 use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
@@ -10,7 +10,7 @@ use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::preview2::{Table, WasiCtx, WasiCtxBuilder, WasiView};
 use wit_component::{ComponentEncoder, StringEncoding};
-use wit_parser::Resolve;
+use wit_parser::{Resolve, WorldKey};
 
 mod flavorful;
 mod lists;
@@ -620,6 +620,30 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
 "#,
         );
 
+        // Write the WasmImports for NativeAOT-LLVM.
+        // See https://github.com/dotnet/runtimelab/issues/2383
+        
+        for world in &resolve.worlds {
+
+            for import in &world.1.imports {
+                match import.0 {
+                    WorldKey::Name(name) => {
+                    },
+                    WorldKey::Interface(id) => {
+                        let module_name = resolve.name_world_key(import.0);
+                        csproj.push_str("\t<ItemGroup>\n");
+
+                        for (i, (_name, func)) in resolve.interfaces[*id].functions.iter().enumerate() {
+                            let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\"/>\n", module_name, func.name);
+                            csproj.push_str(&wasm_import);
+                        }
+
+                        csproj.push_str("\t</ItemGroup>\n\n");
+                    }
+                };
+            }
+        }
+
         csproj.push_str("\t<ItemGroup>\n");
         csproj.push_str(&format!(
             "\t\t<NativeLibrary Include=\"{snake}_component_type.o\" />\n"
@@ -635,35 +659,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
 </Project>
             "#,
         );
-
-        //TODO: The below doesn't seem to work as it's not generating any files?
-        //let csproj = format!(
-        //    "<Project Sdk=\"Microsoft.NET.Sdk\">
-        //
-        //    <PropertyGroup>
-        //        <OutputType>Exe</OutputType>
-        //        <TargetFramework>net8.0</TargetFramework>
-        //        <ImplicitUsings>enable</ImplicitUsings>
-        //        <Nullable>enable</Nullable>
-        //        <WitCompilerGeneratedFilesOutputPath>Generated</WitCompilerGeneratedFilesOutputPath>
-        //        <WitBindgenPath>C:\\dev\\wit-bindgen-yowl\\target\\debug</WitBindgenPath>
-        //    </PropertyGroup>
-        //
-        //    <ItemGroup>
-        //        <CompilerVisibleProperty Include=\"WitCompilerGeneratedFilesOutputPath\" />
-        //        <CompilerVisibleProperty Include=\"WitBindgenPath\" />
-        //
-        //        <AdditionalFiles Include=\"C:\\dev\\nor2-wit-csharp\\wit-bindgen-yowl\\tests\\numbers\\world.wit\" />
-        //    </ItemGroup>
-        //
-        //
-        //    <ItemGroup>
-        //        <ProjectReference Include=\"C:\\dev\\nor2-wit-csharp\\wit-bindgen-yowl\\testing-csharp\\WitSourceGen\\WitSourceGen\\WitSourceGen.csproj\"
-        //                          OutputItemType=\"Analyzer\"
-        //                          ReferenceOutputAssembly=\"false\" />
-        //    </ItemGroup>
-        //</Project>"
-        //);
 
         let camel = snake.to_upper_camel_case();
 
