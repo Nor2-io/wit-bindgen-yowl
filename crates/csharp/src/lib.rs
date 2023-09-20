@@ -324,9 +324,10 @@ impl WorldGenerator for CSharp {
                 r#"
                 public static class InteropString
                 {
-                    public static IntPtr FromString(string input)
+                    public static IntPtr FromString(string input, out int length)
                     {
                         var utf8Bytes = Encoding.UTF8.GetBytes(input);
+                        length = utf8Bytes.Length;
                         var gcHandle = GCHandle.Alloc(utf8Bytes, GCHandleType.Pinned);
                         return gcHandle.AddrOfPinnedObject();
                     }
@@ -351,24 +352,32 @@ impl WorldGenerator for CSharp {
                 uwrite!(
                     ret_area_str,
                     "
+                    [InlineArray({})]
                     [StructLayout(LayoutKind.Sequential, Pack = {})]
-                    private unsafe struct ReturnArea
+                    private struct ReturnArea
                     {{
-                        fixed byte Buffer[{}];
+                        private byte Buffer0;
     
-                        public void SetS32(int offset, int value)
+                        public int GetS32(int offset)
                         {{
                             fixed (void* ptr = &Buffer[offset])
                             {{
-                                BitConverter.TryWriteBytes(new Span<byte>(ptr, 4), value);
+                                return BitConverter.ToInt32(new Span<byte>(ptr, 4));
                             }}
                         }}
-
-                        public string GetUTF8String(int offset, int byteLength)
+                        
+                        public void SetS32(int offset, int value)
                         {{
-                            fixed (void* ptr = &Buffer[offset])
+                            Span<byte> span = this;
+
+                            BitConverter.TryWriteBytes(span.Slice(offset), value);
+                        }}
+
+                        public string GetUTF8String()
+                        {{
+                            fixed (void* ptr = &Buffer0)
                             {{
-                                return Marshal.PtrToStringUTF8(new IntPtr(ptr));
+                                return Marshal.PtrToStringUTF8(new IntPtr(ptr), GetS32(4));
                             }}
                         }}
                     }}
@@ -376,8 +385,8 @@ impl WorldGenerator for CSharp {
                     [ThreadStatic]
                     private static ReturnArea returnArea = default;
                     ",
-                    self.return_area_align,
                     self.return_area_size,
+                    self.return_area_align,
                 );
 
                 src.push_str(&ret_area_str);
@@ -568,6 +577,36 @@ impl InterfaceGenerator<'_> {
             todo!("resources");
         }
 
+        let sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
+
+        let wasm_result_type = match &sig.results[..] {
+            [] => "void",
+            [result] => wasm_type(*result),
+            _ => unreachable!(),
+        };
+
+        let result_type: String = match func.results.len() {
+            0 => "void".to_string(),
+            1 => {
+                let ty = func.results.iter_types().next().unwrap();
+                self.type_name(ty)
+            }
+            _ => unreachable!(), //TODO
+        };
+
+        let camel_name = func.name.to_upper_camel_case();
+
+        let wasm_params = sig
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, param)| {
+                let ty = wasm_type(*param);
+                format!("{ty} p{i}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
         let mut bindgen = FunctionBindgen::new(
             self,
             &func.name,
@@ -585,41 +624,7 @@ impl InterfaceGenerator<'_> {
             &mut bindgen,
         );
 
-        //TODO: The below is needed for non basic types as we need to load the string into memory directly instead of trying to return the complex type
-        //let sig = self.resolve.wasm_signature(AbiVariant::GuestImport, func);
-        //
-        //let result_type: String = match sig.results.len() {
-        //    0 => "void".to_string(),
-        //    1 => {
-        //        let ty = sig.results.iter().next().unwrap();
-        //        wasm_type(*ty).to_owned()
-        //    }
-        //    _ => unreachable!(), //TODO
-        //};
-        //
-        //let camel_name = func.name.to_upper_camel_case();
-        //
-        //let params = sig
-        //    .params
-        //    .iter()
-        //    .enumerate()
-        //    .map(|(i, param)| {
-        //        let ty = wasm_type(*param);
-        //        format!("{ty} p{i}")
-        //    })
-        //    .collect::<Vec<_>>()
-        //    .join(", ");
-
-        let result_type: String = match func.results.len() {
-            0 => "void".to_string(),
-            1 => {
-                let ty = func.results.iter_types().next().unwrap();
-                self.type_name(ty)
-            }
-            _ => unreachable!(), //TODO
-        };
-
-        let camel_name = func.name.to_upper_camel_case();
+        let src = bindgen.src;
 
         let params = func
             .params
@@ -627,7 +632,8 @@ impl InterfaceGenerator<'_> {
             .enumerate()
             .map(|(i, param)| {
                 let ty = self.type_name(&param.1);
-                format!("{ty} p{i}")
+                let param_name = &param.0;
+                format!("{ty} {param_name}")
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -636,9 +642,50 @@ impl InterfaceGenerator<'_> {
         uwrite!(
             self.csharp_interop_src,
             r#"
+            internal static class {camel_name}Interop
+            {{
                 [DllImport("*", EntryPoint = "{import_name}")]
-                internal static extern {result_type} {camel_name}({params});
+                internal static extern {wasm_result_type} wasmImport{camel_name}({wasm_params});
+            }}
+            "#
+        );
 
+        let mut ret_struct_type = String::new();
+        if(self.gen.return_area_size > 0){
+            writeln!(ret_struct_type, r#"
+                [StructLayout(LayoutKind.Sequential, Pack = {})]
+                private unsafe struct ReturnArea
+                {{
+                    fixed byte Buffer[{}];
+
+                    public int GetS32(int offset)
+                    {{
+                        fixed (void* ptr = &Buffer[offset])
+                        {{
+                            return BitConverter.ToInt32(new Span<byte>(ptr, 4));
+                        }}
+                    }}
+
+                    public string GetUTF8String()
+                    {{
+                        fixed (void* ptr = &Buffer[0])
+                        {{
+                            return Marshal.PtrToStringUTF8(new IntPtr(ptr), GetS32(4));
+                        }}
+                    }}
+                }}
+            "#, self.gen.return_area_align, self.gen.return_area_size);
+        }
+
+        uwrite!(
+            self.csharp_interop_src,
+            r#"
+                {ret_struct_type}
+                internal static {result_type} {camel_name}({params})
+                {{
+                    {src}
+                    //TODO: free alloc handle (interopString) if exists
+                }}
             "#
         );
     }
@@ -1380,8 +1427,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
                     self.src,
                     "
                     var {result_var} = {op};
-                    var length = {result_var}.Length;
-                    IntPtr {interop_string} = InteropString.FromString({result_var});"
+                    IntPtr {interop_string} = InteropString.FromString({result_var}, out int length);"
                 );
 
                 //TODO: Oppertunity to optimize and not reallocate every call
@@ -1396,10 +1442,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             }
 
             Instruction::StringLift { .. } => {
-                let address = &operands[0];
-                let length = &operands[1];
-
-                results.push(format!("returnArea.GetUTF8String({address}, {length})"));
+                results.push(format!("returnArea.GetUTF8String()"));
             }
 
             Instruction::ListLower { .. } => todo!("ListLower"),
@@ -1486,7 +1529,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
 
                 match *amt {
                     0 => (),
-                    1 => uwriteln!(self.src, "return ({cast}){};", operands[0]),
+                    1 => uwriteln!(self.src, "return {};", operands[0]),
                     _ => {
                         let results = operands.join(", ");
                         uwriteln!(self.src, "return ({cast})({results});")
@@ -1521,21 +1564,14 @@ impl Bindgen for FunctionBindgen<'_, '_> {
 
         // Use a stack-based return area for imports, because exports need
         // their return area to be live until the post-return call.
-        // if self.gen.in_import {
-        //     self.import_return_pointer_area_size = self.import_return_pointer_area_size.max(size);
-        //     self.import_return_pointer_area_align =
-        //         self.import_return_pointer_area_align.max(align);
-        //     uwriteln!(self.src, "int32_t {} = (int32_t) &ret_area;", ptr);
-        // } else {
-        //     self.gen.gen.return_pointer_area_size = self.gen.gen.return_pointer_area_size.max(size);
-        //     self.gen.gen.return_pointer_area_align =
-        //         self.gen.gen.return_pointer_area_align.max(align);
-        //     // Declare a statically-allocated return area.
-        //     uwriteln!(self.src, "int32_t {} = (int32_t) &RET_AREA;", ptr);
-        // }
-
-        self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
-        self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
+        if self.gen.in_import {
+            self.gen.gen.return_area_size = size;
+            self.gen.gen.return_area_align = align;
+            self.src.push_str("ReturnArea returnArea = default;");
+        } else {
+            self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
+            self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
+        }
 
         writeln!(
             self.src,

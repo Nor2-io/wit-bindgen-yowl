@@ -634,7 +634,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
                         csproj.push_str("\t<ItemGroup>\n");
 
                         for (i, (_name, func)) in resolve.interfaces[*id].functions.iter().enumerate() {
-                            let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\"/>\n", module_name, func.name);
+                            let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\" />\n", module_name, func.name);
                             csproj.push_str(&wasm_import);
                         }
 
@@ -654,9 +654,6 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         csproj.push_str(
             r#"
             <ItemGroup>
-                <WasmImport Include="test:strings/imports!take-basic" />
-                <WasmImport Include="test:strings/imports!return-unicode" />
-
                 <WasmImport Include="test:numbers/test!roundtrip-u8" />
                 <WasmImport Include="test:numbers/test!roundtrip-s8" />
                 <WasmImport Include="test:numbers/test!roundtrip-u16" />

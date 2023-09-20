@@ -58,7 +58,6 @@ async fn run() -> Result<()> {
 async fn run_test(exports: Strings, store: &mut Store<crate::Wasi<MyImports>>) -> Result<()> {
     exports.call_test_imports(&mut *store).await?;
     assert_eq!(exports.call_return_empty(&mut *store).await?, "");
-    //TODO: Figure out why these doesn't work with C#
     assert_eq!(exports.call_roundtrip(&mut *store, "str").await?, "str");
     assert_eq!(
         exports.call_roundtrip(&mut *store, "🚀🚀🚀 𠈄𓀀").await?,
