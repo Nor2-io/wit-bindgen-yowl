@@ -356,14 +356,13 @@ impl WorldGenerator for CSharp {
                     [StructLayout(LayoutKind.Sequential, Pack = {})]
                     private struct ReturnArea
                     {{
-                        private byte Buffer0;
+                        private byte buffer;
     
-                        public int GetS32(int offset)
+                        private int GetS32(int offset)
                         {{
-                            fixed (void* ptr = &Buffer[offset])
-                            {{
-                                return BitConverter.ToInt32(new Span<byte>(ptr, 4));
-                            }}
+                            ReadOnlySpan<byte> span = this;
+
+                            return BitConverter.ToInt32(span.Slice(offset, 4));
                         }}
                         
                         public void SetS32(int offset, int value)
@@ -373,12 +372,17 @@ impl WorldGenerator for CSharp {
                             BitConverter.TryWriteBytes(span.Slice(offset), value);
                         }}
 
-                        public string GetUTF8String()
+                        internal unsafe int AddrOfBuffer()
                         {{
-                            fixed (void* ptr = &Buffer0)
+                            fixed(byte* ptr = &buffer)
                             {{
-                                return Marshal.PtrToStringUTF8(new IntPtr(ptr), GetS32(4));
+                                return (int)ptr;
                             }}
+                        }}
+
+                        public unsafe string GetUTF8String(int p0, int p1)
+                        {{
+                            return Encoding.UTF8.GetString((byte*)p0, p1);
                         }}
                     }}
     
@@ -428,6 +432,7 @@ impl WorldGenerator for CSharp {
                         {
                             return Marshal.ReAllocHGlobal(ptr, (int)new_size);
                         }
+
                         return Marshal.AllocHGlobal((int)new_size);
                     }
                 }
@@ -653,35 +658,33 @@ impl InterfaceGenerator<'_> {
         let mut ret_struct_type = String::new();
         if(self.gen.return_area_size > 0){
             writeln!(ret_struct_type, r#"
-                [StructLayout(LayoutKind.Sequential, Pack = {})]
                 private unsafe struct ReturnArea
                 {{
-                    fixed byte Buffer[{}];
-
-                    public int GetS32(int offset)
+                    private int GetS32(IntPtr ptr, int offset)
                     {{
-                        fixed (void* ptr = &Buffer[offset])
-                        {{
-                            return BitConverter.ToInt32(new Span<byte>(ptr, 4));
-                        }}
+                        var span = new Span<byte>((void*)ptr, {});
+
+                        return BitConverter.ToInt32(span.Slice(offset, 4));
                     }}
 
-                    public string GetUTF8String()
+                    public string GetUTF8String(IntPtr ptr)
                     {{
-                        fixed (void* ptr = &Buffer[0])
-                        {{
-                            return Marshal.PtrToStringUTF8(new IntPtr(ptr), GetS32(4));
-                        }}
+                        return Encoding.UTF8.GetString((byte*)GetS32(ptr, 0), GetS32(ptr, 4));
                     }}
+
                 }}
-            "#, self.gen.return_area_align, self.gen.return_area_size);
+
+                [ThreadStatic]
+                [FixedAddressValueType]
+                private static ReturnArea returnArea;
+            "#, self.gen.return_area_size);
         }
 
         uwrite!(
             self.csharp_interop_src,
             r#"
                 {ret_struct_type}
-                internal static {result_type} {camel_name}({params})
+                internal static unsafe {result_type} {camel_name}({params})
                 {{
                     {src}
                     //TODO: free alloc handle (interopString) if exists
@@ -761,7 +764,6 @@ impl InterfaceGenerator<'_> {
             r#"
             [UnmanagedCallersOnly(EntryPoint = "{export_name}")]
             public static {wasm_result_type} {interop_name}({wasm_params}) {{
-                Console.WriteLine("{export_name}");
                 {src}
             }}
             "#
@@ -1442,7 +1444,16 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             }
 
             Instruction::StringLift { .. } => {
-                results.push(format!("returnArea.GetUTF8String()"));
+                if(self.gen.in_import)
+                {
+                    results.push(format!("returnArea.GetUTF8String(ptr)"));
+                }
+                else {
+                    let address = &operands[0];
+                    let length = &operands[1];
+    
+                    results.push(format!("returnArea.GetUTF8String({address}, {length})"));
+                }
             }
 
             Instruction::ListLower { .. } => todo!("ListLower"),
@@ -1567,22 +1578,34 @@ impl Bindgen for FunctionBindgen<'_, '_> {
         if self.gen.in_import {
             self.gen.gen.return_area_size = size;
             self.gen.gen.return_area_align = align;
-            self.src.push_str("ReturnArea returnArea = default;");
+
+            writeln!(
+                self.src,
+                "
+                void* buffer = stackalloc int[{} + {} - 1];
+                var {} = ((int)buffer) + ({} - 1) & -{};
+                ",
+                size,
+                align,
+                ptr,
+                align,
+                align,
+            );
+
         } else {
             self.gen.gen.return_area_size = self.gen.gen.return_area_size.max(size);
             self.gen.gen.return_area_align = self.gen.gen.return_area_align.max(align);
+
+            writeln!(
+                self.src,
+                "
+                var {} = returnArea.AddrOfBuffer();
+                ",
+                ptr,
+            );
         }
 
-        writeln!(
-            self.src,
-            "
-            var gcHandle = GCHandle.Alloc(returnArea, GCHandleType.Pinned);
-            var {} = gcHandle.AddrOfPinnedObject();
-            ",
-            ptr
-        );
-
-        format!("{ptr}.ToInt32()")
+        format!("{ptr}")
     }
 
     fn push_block(&mut self) {
