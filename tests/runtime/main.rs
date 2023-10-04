@@ -10,7 +10,7 @@ use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::preview2::{Table, WasiCtx, WasiCtxBuilder, WasiView};
 use wit_component::{ComponentEncoder, StringEncoding};
-use wit_parser::{Resolve, WorldKey};
+use wit_parser::{Resolve, WorldItem};
 
 mod flavorful;
 mod lists;
@@ -626,21 +626,24 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
         for world in &resolve.worlds {
 
             for import in &world.1.imports {
-                match import.0 {
-                    WorldKey::Name(name) => {
-                    },
-                    WorldKey::Interface(id) => {
-                        let module_name = resolve.name_world_key(import.0);
-                        csproj.push_str("\t<ItemGroup>\n");
-
-                        for (i, (_name, func)) in resolve.interfaces[*id].functions.iter().enumerate() {
-                            let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\" />\n", module_name, func.name);
+                let module_name = resolve.name_world_key(import.0);
+                csproj.push_str("\t<ItemGroup>\n");
+                
+                match import.1 {
+                    WorldItem::Function(f) => {
+                        let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\" />\n", module_name, f.name);
+                        csproj.push_str(&wasm_import);
+                    }
+                    WorldItem::Interface(id) => {
+                        for (_, f) in resolve.interfaces[*id].functions.iter() {
+                            let wasm_import = format!("\t\t<WasmImport Include=\"{}!{}\" />\n", module_name, f.name);
                             csproj.push_str(&wasm_import);
                         }
-
-                        csproj.push_str("\t</ItemGroup>\n\n");
                     }
-                };
+                    WorldItem::Type(_) => {}
+                }
+
+                csproj.push_str("\t</ItemGroup>\n\n");
             }
         }
 
@@ -730,6 +733,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .arg("/p:MSBuildEnableWorkloadResolver=false")
             .arg("--self-contained")
             .arg("/p:UseAppHost=false")
+            .arg("/bl")
             .arg("-o")
             .arg(&out_wasm);
         println!("{:?}", cmd);
@@ -758,6 +762,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .validate(true)
             .adapter("wasi_snapshot_preview1", &wasi_adapter)
             .expect("adapter failed to get loaded")
+            .option(true)
             .encode()
             .expect(&format!(
                 "module {:?} can be translated to a component",

@@ -4,7 +4,7 @@ using wit_many_arguments.Wit.imports.Imports;
 
 public class ManyArgumentsWorldImpl : ManyArgumentsWorld
 {
-    internal static void ManyArguments(
+    public static void ManyArguments(
         ulong a1,
         ulong a2,
         ulong a3,
