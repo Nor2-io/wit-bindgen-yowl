@@ -41,12 +41,12 @@ mod codegen_tests {
 mod strings {
     wit_bindgen::generate!({
         inline: "
-            package my:strings
+            package my:strings;
 
             world not-used-name {
                 import cat: interface {
-                    foo: func(x: string)
-                    bar: func() -> string
+                    foo: func(x: string);
+                    bar: func() -> string;
                 }
             }
         ",
@@ -66,12 +66,12 @@ mod strings {
 mod raw_strings {
     wit_bindgen::generate!({
         inline: "
-            package my:raw-strings
+            package my:raw-strings;
 
             world not-used-name {
                 import cat: interface {
-                    foo: func(x: string)
-                    bar: func() -> string
+                    foo: func(x: string);
+                    bar: func() -> string;
                 }
             }
         ",
@@ -91,12 +91,12 @@ mod raw_strings {
 mod skip {
     wit_bindgen::generate!({
         inline: "
-            package my:inline
+            package my:inline;
 
             world baz {
                 export exports: interface {
-                    foo: func()
-                    bar: func()
+                    foo: func();
+                    bar: func();
                 }
             }
         ",
@@ -116,30 +116,29 @@ mod skip {
 mod symbol_does_not_conflict {
     wit_bindgen::generate!({
         inline: "
-            package my:inline
+            package my:inline;
 
             interface foo1 {
-                foo: func()
+                foo: func();
             }
 
             interface foo2 {
-                foo: func()
+                foo: func();
             }
 
             interface bar1 {
-                bar: func() -> string
+                bar: func() -> string;
             }
 
             interface bar2 {
-                bar: func() -> string
+                bar: func() -> string;
             }
 
-
             world foo {
-                export foo1
-                export foo2
-                export bar1
-                export bar2
+                export foo1;
+                export foo2;
+                export bar1;
+                export bar2;
             }
         ",
         exports: {
@@ -176,9 +175,9 @@ mod symbol_does_not_conflict {
 mod alternative_runtime_path {
     wit_bindgen::generate!({
         inline: "
-            package my:inline
+            package my:inline;
             world foo {
-                export foobar: func()
+                export foobar: func();
             }
         ",
         runtime_path: "my_rt",
@@ -199,14 +198,14 @@ mod alternative_runtime_path {
 mod alternative_bitflags_path {
     wit_bindgen::generate!({
         inline: "
-            package my:inline
+            package my:inline;
             world foo {
                 flags bar {
                     foo,
                     bar,
                     baz
                 }
-                export get-flag: func() -> bar
+                export get-flag: func() -> bar;
             }
         ",
         bitflags_path: "my_bitflags",
@@ -229,18 +228,18 @@ mod alternative_bitflags_path {
 mod owned_resource_deref_mut {
     wit_bindgen::generate!({
         inline: "
-            package my:inline
+            package my:inline;
 
             interface foo {
                 resource bar {
-                    constructor(data: u32)
-                    get-data: func() -> u32
-                    consume: static func(%self: bar) -> u32
+                    constructor(data: u32);
+                    get-data: func() -> u32;
+                    consume: static func(%self: bar) -> u32;
                 }
             }
 
             world baz {
-                export foo
+                export foo;
             }
         ",
         exports: {
@@ -269,6 +268,81 @@ mod owned_resource_deref_mut {
             let mutable_data: &mut u32 = &mut this.data;
             *mutable_data = new_data;
             this.data
+        }
+    }
+}
+
+mod package_with_versions {
+    wit_bindgen::generate!({
+        inline: "
+            package my:inline@0.0.0;
+
+            interface foo {
+                resource bar {
+                    constructor();
+                }
+            }
+
+            world baz {
+                export foo;
+            }
+        ",
+        exports: {
+            "my:inline/foo@0.0.0/bar": Resource
+        }
+    });
+
+    pub struct Resource;
+
+    impl exports::my::inline::foo::GuestBar for Resource {
+        fn new() -> Self {
+            loop {}
+        }
+    }
+}
+
+mod custom_derives {
+    use std::collections::{hash_map::RandomState, HashSet};
+
+    wit_bindgen::generate!({
+        inline: "
+            package my:inline;
+
+            interface blah {
+                record foo {
+                    field1: string,
+                    field2: list<u32>
+                }
+
+                bar: func(cool: foo);
+            }
+
+            world baz {
+                export blah;
+            }
+        ",
+        exports: {
+            "my:inline/blah": Component
+        },
+        // Clone is included by default almost everywhere, so include it here to make sure it
+        // doesn't conflict
+        additional_derives: [serde::Serialize, serde::Deserialize, Hash, Clone, PartialEq, Eq],
+    });
+
+    use exports::my::inline::blah::Foo;
+
+    struct Component;
+    impl exports::my::inline::blah::Guest for Component {
+        fn bar(cool: Foo) {
+            // Check that built in derives that I've added actually work by seeing that this hashes
+            let _blah: HashSet<Foo, RandomState> = HashSet::from_iter([Foo {
+                field1: "hello".to_string(),
+                field2: vec![1, 2, 3],
+            }]);
+
+            // Check that the attributes from an external crate actually work. If they don't work,
+            // compilation will fail here
+            let _ = serde_json::to_string(&cool);
         }
     }
 }

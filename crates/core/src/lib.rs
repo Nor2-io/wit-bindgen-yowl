@@ -42,6 +42,9 @@ pub struct TypeInfo {
 
     /// Whether or not this type (transitively) has a borrow handle.
     pub has_borrow_handle: bool,
+
+    /// Whether or not this type (transitively) has an own handle.
+    pub has_own_handle: bool,
 }
 
 impl std::ops::BitOrAssign for TypeInfo {
@@ -52,6 +55,16 @@ impl std::ops::BitOrAssign for TypeInfo {
         self.has_list |= rhs.has_list;
         self.has_resource |= rhs.has_resource;
         self.has_borrow_handle |= rhs.has_borrow_handle;
+        self.has_own_handle |= rhs.has_own_handle;
+    }
+}
+
+impl TypeInfo {
+    pub fn is_clone(&self) -> bool {
+        !self.has_resource
+    }
+    pub fn is_copy(&self) -> bool {
+        !self.has_list && !self.has_resource
     }
 }
 
@@ -155,7 +168,10 @@ impl Types {
                 info.has_resource = true;
             }
             TypeDefKind::Handle(handle) => {
-                info.has_borrow_handle = matches!(handle, Handle::Borrow(_));
+                match handle {
+                    Handle::Borrow(_) => info.has_borrow_handle = true,
+                    Handle::Own(_) => info.has_own_handle = true,
+                }
                 info.has_resource = true;
             }
             TypeDefKind::Tuple(t) => {
@@ -541,8 +557,7 @@ pub trait InterfaceGenerator<'a> {
         let ty = &self.resolve().types[id];
         match &ty.kind {
             TypeDefKind::Record(record) => self.type_record(id, name, record, &ty.docs),
-            // TODO: use real docs when they're available:
-            TypeDefKind::Resource => self.type_resource(id, name, &Docs::default()),
+            TypeDefKind::Resource => self.type_resource(id, name, &ty.docs),
             TypeDefKind::Flags(flags) => self.type_flags(id, name, flags, &ty.docs),
             TypeDefKind::Tuple(tuple) => self.type_tuple(id, name, tuple, &ty.docs),
             TypeDefKind::Enum(enum_) => self.type_enum(id, name, enum_, &ty.docs),
