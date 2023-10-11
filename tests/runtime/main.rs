@@ -122,7 +122,7 @@ where
         let mut table = Table::new();
         let wasi: WasiCtx = WasiCtxBuilder::new()
             .inherit_stdout()
-            .set_args(&[""])
+            .args(&[""])
             .build(&mut table)?;
 
         println!("wasi ctx built");

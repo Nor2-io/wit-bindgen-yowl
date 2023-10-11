@@ -31,9 +31,9 @@ wasm-encoder = { version="0.33.2", path = "../wasm-tools/crates/wasm-encoder" }
 wasm-metadata = {version="0.10.6", path = "../wasm-tools/crates/wasm-metadata" }
 wit-parser = {version="0.11.3", path = "../wasm-tools/crates/wit-parser" }
 wit-component = { version="0.14.4", path = "../wasm-tools/crates/wit-component" }
-wasmtime_wasi = "11.0.1"
+wasmtime-wasi = "13.0.0"
 
-wit-bindgen-csharp = { path = 'crates/csharp', version = '0.10.0' }
+wit-bindgen-csharp = { path = 'crates/csharp', version = '0.12.0' }
 wit-bindgen-core = { path = 'crates/core', version = '0.12.0' }
 wit-bindgen-c = { path = 'crates/c', version = '0.12.0' }
 wit-bindgen-rust = { path = "crates/rust", version = "0.12.0" }
