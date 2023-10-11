@@ -27,10 +27,10 @@ env_logger = "0.10.0"
 indexmap = "2.0.0"
 async-trait = "0.1.73"
 
-wasm-encoder = "0.32.0"
-wasm-metadata = "0.10.3"
-wit-parser = "0.11.0"
-wit-component = "0.14.0"
+wasm-encoder = { version="0.33.2", path = "../wasm-tools/crates/wasm-encoder" }
+wasm-metadata = {version="0.10.3", path = "../wasm-tools/crates/wasm-metadata" }
+wit-parser = {version="0.11.0", path = "../wasm-tools/crates/wit-parser" }
+wit-component = { version="0.14.0", path = "../wasm-tools/crates/wit-component" }
 wasmtime_wasi = "11.0.1"
 
 wit-bindgen-core = { path = 'crates/core', version = '0.10.0' }
