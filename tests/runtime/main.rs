@@ -202,6 +202,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .module(&module)?
             .validate(true)
             .adapter("wasi_snapshot_preview1", &wasi_adapter)?
+            .realloc_via_memory_grow(true)
             .encode()?;
 
         let dst = out_dir.join("rust.wasm");
@@ -563,8 +564,8 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             <!--To inherit the global NuGet package sources remove the <clear/> line below -->
             <clear />
             <add key="nuget" value="https://api.nuget.org/v3/index.json" />
-                <add key="dotnet-experimental" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json" />
-            <add key="nuget" value="https://api.nuget.org/v3/index.json" />
+            <!--<add key="dotnet-experimental" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json" />-->
+            <add key="dotnet-experimental" value="C:\github\runtimelab\artifacts\packages\Debug\Shipping" />
           </packageSources>
         </configuration>"#,
         )?;
@@ -762,7 +763,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .validate(true)
             .adapter("wasi_snapshot_preview1", &wasi_adapter)
             .expect("adapter failed to get loaded")
-            .option(true)
+            .realloc_via_memory_grow(true)
             .encode()
             .expect(&format!(
                 "module {:?} can be translated to a component",

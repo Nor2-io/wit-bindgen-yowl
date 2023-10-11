@@ -406,6 +406,37 @@ impl WorldGenerator for CSharp {
         }
 
         src.push_str("\n");
+        src.push_str(
+            r#"
+                internal static class Intrinsics
+                {
+                    [UnmanagedCallersOnly(EntryPoint = "cabi_realloc")]
+                    internal static IntPtr cabi_realloc(IntPtr ptr, uint old_size, uint align, uint new_size)
+                    {
+                        if (new_size == 0)
+                        {
+                            if(old_size != 0)
+                            {
+                                Marshal.Release(ptr);
+                            }
+                            return new IntPtr((int)align);
+                        }
+                
+                        if (new_size > int.MaxValue)
+                        {
+                            throw new ArgumentException("Cannot allocate more that int.MaxValue", nameof(new_size));
+                        }
+                        
+                        if(old_size != 0)
+                        {
+                            return Marshal.ReAllocHGlobal(ptr, (int)new_size);
+                        }
+
+                        return Marshal.AllocHGlobal((int)new_size);
+                    }
+                }
+            "#,
+        );
         src.push_str("}\n");
 
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
