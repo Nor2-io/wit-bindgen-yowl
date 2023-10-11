@@ -123,7 +123,7 @@ where
         let wasi: WasiCtx = WasiCtxBuilder::new()
             .inherit_stdout()
             .args(&[""])
-            .build(&mut table)?;
+            .build();
 
         println!("wasi ctx built");
 

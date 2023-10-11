@@ -31,7 +31,7 @@ wasm-encoder = { version="0.33.2", path = "../wasm-tools/crates/wasm-encoder" }
 wasm-metadata = {version="0.10.6", path = "../wasm-tools/crates/wasm-metadata" }
 wit-parser = {version="0.11.3", path = "../wasm-tools/crates/wit-parser" }
 wit-component = { version="0.14.4", path = "../wasm-tools/crates/wit-component" }
-wasmtime-wasi = "13.0.0"
+wasmtime-wasi = { version="15.0.0", path = "../wasmtime/crates/wasi" }
 
 wit-bindgen-csharp = { path = 'crates/csharp', version = '0.12.0' }
 wit-bindgen-core = { path = 'crates/core', version = '0.12.0' }
@@ -62,7 +62,7 @@ wit-bindgen-teavm-java = { workspace = true, features = [
 wit-bindgen-go = { workspace = true, features = ['clap'], optional = true }
 wit-component = { workspace = true }
 wasm-encoder = { workspace = true }
-wasmtime-wasi = { workdpace = true }
+wasmtime-wasi = { workspace = true }
 async-trait = "0.1.73"
 
 [features]
@@ -83,7 +83,7 @@ go = ['dep:wit-bindgen-go']
 
 [dev-dependencies]
 heck = { workspace = true }
-wasmtime = { version = "13", features = ['component-model'] }
+wasmtime = { version = "15", path = "../wasmtime/crates/wasmtime", features = ['component-model'] }
 test-artifacts = { path = 'crates/test-rust-wasm/artifacts' }
 wit-parser = { workspace = true }
 tokio = { version = "1.28.1", features = ["full"] }
