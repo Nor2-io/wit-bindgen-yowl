@@ -1,5 +1,4 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use heck::*;
 use std::borrow::Cow;
 use std::fs;
@@ -56,22 +55,21 @@ impl<T: Send> WasiView for Wasi<T> {
     }
 }
 
-#[async_trait]
 trait TestConfigurer<T, U>
 where
     T: Send,
     U: Sized,
 {
-    async fn instantiate_async(
+    fn instantiate(
         &self,
         store: &mut Store<Wasi<T>>,
         component: &Component,
         linker: &Linker<Wasi<T>>,
     ) -> Result<(U, Instance)>;
-    async fn test(&self, exports: U, store: &mut Store<Wasi<T>>) -> Result<()>;
+    fn test(&self, exports: U, store: &mut Store<Wasi<T>>) -> Result<()>;
 }
 
-async fn run_test<T: Send, U, C>(
+fn run_test<T: Send, U, C>(
     name: &str,
     add_to_linker: fn(&mut Linker<Wasi<T>>) -> Result<()>,
     configurer: C,
@@ -80,10 +78,10 @@ where
     T: Default,
     C: TestConfigurer<T, U>,
 {
-    run_test_from_dir(name, name, add_to_linker, configurer).await
+    run_test_from_dir(name, name, add_to_linker, configurer)
 }
 
-async fn run_test_from_dir<T: Send, U, C>(
+fn run_test_from_dir<T: Send, U, C>(
     dir_name: &str,
     name: &str,
     add_to_linker: fn(&mut Linker<Wasi<T>>) -> Result<()>,
@@ -99,7 +97,6 @@ where
     config.cache_config_load_default()?;
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     config.wasm_component_model(true);
-    config.async_support(true);
 
     let engine = Engine::new(&config)?;
 
@@ -131,17 +128,16 @@ where
 
         let mut store = Store::new(&engine, data);
 
-        wasmtime_wasi::preview2::command::add_to_linker(&mut linker)?;
+        wasmtime_wasi::preview2::command::sync::add_to_linker(&mut linker)?;
 
         println!("instantiate");
 
         let (exports, _) = configurer
-            .instantiate_async(&mut store, &component, &linker)
-            .await?;
+            .instantiate(&mut store, &component, &linker)?;
         println!("instantiate testing");
 
         println!("testing {wasm:?}");
-        configurer.test(exports, &mut store).await?;
+        configurer.test(exports, &mut store)?;
     }
 
     Ok(())
@@ -763,7 +759,7 @@ fn tests(name: &str, dir_name: &str) -> Result<Vec<PathBuf>> {
             .validate(true)
             .adapter("wasi_snapshot_preview1", &wasi_adapter)
             .expect("adapter failed to get loaded")
-            .option(true)
+            .realloc_via_memory_grow(true)
             .encode()
             .expect(&format!(
                 "module {:?} can be translated to a component",

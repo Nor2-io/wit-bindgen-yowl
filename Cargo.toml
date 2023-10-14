@@ -25,7 +25,6 @@ pulldown-cmark = { version = "0.9", default-features = false }
 clap = { version = "4.3.19", features = ["derive"] }
 env_logger = "0.10.0"
 indexmap = "2.0.0"
-async-trait = "0.1.73"
 
 wasm-encoder = { version="0.33.2", path = "../wasm-tools/crates/wasm-encoder" }
 wasm-metadata = {version="0.10.6", path = "../wasm-tools/crates/wasm-metadata" }
@@ -63,7 +62,6 @@ wit-bindgen-go = { workspace = true, features = ['clap'], optional = true }
 wit-component = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmtime-wasi = { workspace = true }
-async-trait = "0.1.73"
 
 [features]
 default = [
@@ -86,5 +84,3 @@ heck = { workspace = true }
 wasmtime = { version = "15", path = "../wasmtime/crates/wasmtime", features = ['component-model'] }
 test-artifacts = { path = 'crates/test-rust-wasm/artifacts' }
 wit-parser = { workspace = true }
-tokio = { version = "1.28.1", features = ["full"] }
-async-trait = { workspace = true }
