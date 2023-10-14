@@ -1546,7 +1546,7 @@ name = "test-helpers"
 version = "0.0.0"
 dependencies = [
  "codegen-macro",
- "wasm-encoder 0.32.0",
+ "wasm-encoder 0.35.0",
  "wit-bindgen-core",
  "wit-component",
  "wit-parser 0.11.0",
@@ -1821,6 +1821,15 @@ name = "wasm-encoder"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ba64e81215916eaeb48fee292f29401d69235d62d8b8fd92a7b2844ec5ae5f7"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ca90ba1b5b0a70d3d49473c5579951f3bddc78d47b59256d2f9d4922b150aca"
 dependencies = [
  "leb128",
 ]
@@ -2417,7 +2426,7 @@ dependencies = [
  "clap",
  "heck",
  "test-helpers",
- "wasm-encoder 0.32.0",
+ "wasm-encoder 0.35.0",
  "wasm-metadata",
  "wit-bindgen-core",
  "wit-component",
@@ -2433,7 +2442,7 @@ dependencies = [
  "heck",
  "test-artifacts",
  "tokio",
- "wasm-encoder 0.32.0",
+ "wasm-encoder 0.35.0",
  "wasmtime",
  "wasmtime-wasi",
  "wit-bindgen-c",
@@ -2464,7 +2473,7 @@ dependencies = [
  "clap",
  "heck",
  "test-helpers",
- "wasm-encoder 0.32.0",
+ "wasm-encoder 0.35.0",
  "wasm-metadata",
  "wit-bindgen-c",
  "wit-bindgen-core",
