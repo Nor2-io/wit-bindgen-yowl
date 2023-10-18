@@ -284,23 +284,35 @@ impl WorldGenerator for C {
                 StringEncoding::CompactUTF16 => unimplemented!(),
             };
             let ty = self.char_type();
+            let c_string_ty = match self.opts.string_encoding {
+                StringEncoding::UTF8 => "char",
+                StringEncoding::UTF16 => "char16_t",
+                StringEncoding::CompactUTF16 => panic!("Compact UTF16 unsupported"),
+            };
             uwrite!(
                 self.src.h_helpers,
                 "
-                   void {snake}_string_set({snake}_string_t *ret, const {ty} *s);
-                   void {snake}_string_dup({snake}_string_t *ret, const {ty} *s);
+                   // Transfers ownership of `s` into the string `ret`
+                   void {snake}_string_set({snake}_string_t *ret, {c_string_ty} *s);
+
+                   // Creates a copy of the input nul-terminate string `s` and
+                   // stores it into the component model string `ret`.
+                   void {snake}_string_dup({snake}_string_t *ret, const {c_string_ty} *s);
+
+                   // Deallocates the string pointed to by `ret`, deallocating
+                   // the memory behind the string.
                    void {snake}_string_free({snake}_string_t *ret);\
                ",
             );
             uwrite!(
                 self.src.c_helpers,
                 "
-                   void {snake}_string_set({snake}_string_t *ret, const {ty} *s) {{
+                   void {snake}_string_set({snake}_string_t *ret, {c_string_ty} *s) {{
                        ret->ptr = ({ty}*) s;
                        ret->len = {strlen};
                    }}
 
-                   void {snake}_string_dup({snake}_string_t *ret, const {ty} *s) {{
+                   void {snake}_string_dup({snake}_string_t *ret, const {c_string_ty} *s) {{
                        ret->len = {strlen};
                        ret->ptr = cabi_realloc(NULL, 0, {size}, ret->len * {size});
                        memcpy(ret->ptr, s, ret->len * {size});
@@ -440,8 +452,8 @@ impl C {
 
     fn char_type(&self) -> &'static str {
         match self.opts.string_encoding {
-            StringEncoding::UTF8 => "char",
-            StringEncoding::UTF16 => "char16_t",
+            StringEncoding::UTF8 => "uint8_t",
+            StringEncoding::UTF16 => "uint16_t",
             StringEncoding::CompactUTF16 => panic!("Compact UTF16 unsupported"),
         }
     }
@@ -569,7 +581,7 @@ impl C {
 
                 uwriteln!(
                     h_str,
-                    "void {borrow_namespace}_{snake}_drop_borrow({borrow_name});"
+                    "extern void {borrow_namespace}_{snake}_drop_borrow({borrow_name});"
                 );
 
                 uwriteln!(
@@ -589,7 +601,7 @@ impl C {
 
                 uwriteln!(
                     h_str,
-                    "{own_name} {namespace}_{snake}_new({namespace}_{snake}_t*);"
+                    "extern {own_name} {namespace}_{snake}_new({namespace}_{snake}_t*);"
                 );
 
                 uwriteln!(
@@ -604,7 +616,7 @@ impl C {
 
                 uwriteln!(
                     h_str,
-                    "{namespace}_{snake}_t* {namespace}_{snake}_rep({own_name});"
+                    "extern {namespace}_{snake}_t* {namespace}_{snake}_rep({own_name});"
                 );
 
                 uwriteln!(
@@ -736,18 +748,22 @@ impl C {
                 self.src.h_defs(
                     "struct {
                     bool is_err;
-                    union {
                 ",
                 );
-                if let Some(ok) = get_nonempty_type(resolve, r.ok.as_ref()) {
-                    let ty = self.type_name(resolve, ok);
-                    uwriteln!(self.src.h_defs, "{ty} ok;");
+                let ok_ty = get_nonempty_type(resolve, r.ok.as_ref());
+                let err_ty = get_nonempty_type(resolve, r.err.as_ref());
+                if ok_ty.is_some() || err_ty.is_some() {
+                    self.src.h_defs("union {\n");
+                    if let Some(ok) = ok_ty {
+                        let ty = self.type_name(resolve, ok);
+                        uwriteln!(self.src.h_defs, "{ty} ok;");
+                    }
+                    if let Some(err) = err_ty {
+                        let ty = self.type_name(resolve, err);
+                        uwriteln!(self.src.h_defs, "{ty} err;");
+                    }
+                    self.src.h_defs("} val;\n");
                 }
-                if let Some(err) = get_nonempty_type(resolve, r.err.as_ref()) {
-                    let ty = self.type_name(resolve, err);
-                    uwriteln!(self.src.h_defs, "{ty} err;");
-                }
-                self.src.h_defs("} val;\n");
                 self.src.h_defs("}");
             }
             TypeDefKind::List(t) => {
@@ -1027,8 +1043,7 @@ impl C {
                                 }
                                 _ => {}
                             }
-                            self.public_anonymous_types.insert(*id);
-                            self.private_anonymous_types.remove(id);
+                            self.visit_anonymous_types(resolve, &Type::Id(*id));
                             dst.push_str(&ns);
                             dst.push_str("_");
                             push_ty_name(
@@ -1043,6 +1058,87 @@ impl C {
                     },
                 }
             }
+        }
+    }
+
+    fn visit_anonymous_types(&mut self, resolve: &Resolve, ty: &Type) {
+        match ty {
+            Type::String => {
+                self.needs_string = true;
+            }
+            Type::Id(id) => {
+                let ty = &resolve.types[*id];
+                if ty.name.is_none() {
+                    match &ty.kind {
+                        TypeDefKind::Type(_) => {}
+                        TypeDefKind::Handle(Handle::Borrow(resource))
+                            if matches!(
+                                self.resources
+                                    .get(&dealias(resolve, *resource))
+                                    .map(|info| &info.direction),
+                                Some(Direction::Export)
+                            ) => {}
+                        _ => {
+                            self.public_anonymous_types.insert(*id);
+                            self.private_anonymous_types.remove(id);
+                        }
+                    }
+                }
+
+                match &ty.kind {
+                    TypeDefKind::Type(t) => self.visit_anonymous_types(resolve, t),
+                    TypeDefKind::Record(r) => {
+                        for field in &r.fields {
+                            self.visit_anonymous_types(resolve, &field.ty);
+                        }
+                    }
+                    TypeDefKind::Resource
+                    | TypeDefKind::Handle(_)
+                    | TypeDefKind::Flags(_)
+                    | TypeDefKind::Enum(_) => {}
+                    TypeDefKind::Variant(v) => {
+                        for case in &v.cases {
+                            if let Some(ty) = &case.ty {
+                                self.visit_anonymous_types(resolve, ty);
+                            }
+                        }
+                    }
+                    TypeDefKind::Tuple(t) => {
+                        for ty in &t.types {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                    }
+                    TypeDefKind::Option(ty) => {
+                        self.visit_anonymous_types(resolve, ty);
+                    }
+                    TypeDefKind::Result(r) => {
+                        if let Some(ty) = &r.ok {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                        if let Some(ty) = &r.err {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                    }
+                    TypeDefKind::List(ty) => {
+                        self.visit_anonymous_types(resolve, ty);
+                    }
+                    TypeDefKind::Future(ty) => {
+                        if let Some(ty) = ty {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                    }
+                    TypeDefKind::Stream(s) => {
+                        if let Some(ty) = &s.element {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                        if let Some(ty) = &s.end {
+                            self.visit_anonymous_types(resolve, ty);
+                        }
+                    }
+                    TypeDefKind::Unknown => unreachable!(),
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -1180,25 +1276,39 @@ pub fn owner_namespace(
 ) -> Option<String> {
     let ty = &resolve.types[id];
     match ty.owner {
-        TypeOwner::Interface(owner) => {
-            Some(interface_identifier(&interface_names[&owner], resolve))
-        }
+        TypeOwner::Interface(owner) => Some(interface_identifier(
+            &interface_names[&owner],
+            resolve,
+            false,
+        )),
         TypeOwner::World(owner) => Some(resolve.worlds[owner].name.to_snake_case()),
         TypeOwner::None => None,
     }
 }
 
-fn interface_identifier(interface_id: &WorldKey, resolve: &Resolve) -> String {
+fn interface_identifier(interface_id: &WorldKey, resolve: &Resolve, in_export: bool) -> String {
     match interface_id {
         WorldKey::Name(name) => name.to_snake_case(),
         WorldKey::Interface(id) => {
             let mut ns = String::new();
+            if in_export {
+                ns.push_str("exports_");
+            }
             let iface = &resolve.interfaces[*id];
             let pkg = &resolve.packages[iface.package.unwrap()];
             ns.push_str(&pkg.name.namespace.to_snake_case());
             ns.push_str("_");
             ns.push_str(&pkg.name.name.to_snake_case());
             ns.push_str("_");
+            if let Some(version) = &pkg.name.version {
+                let version = version
+                    .to_string()
+                    .replace('.', "_")
+                    .replace('-', "_")
+                    .replace('+', "_");
+                ns.push_str(&version);
+                ns.push_str("_");
+            }
             ns.push_str(&iface.name.as_ref().unwrap().to_snake_case());
             ns
         }
@@ -1542,22 +1652,10 @@ impl<'a> wit_bindgen_core::InterfaceGenerator<'a> for InterfaceGenerator<'a> {
 }
 
 impl InterfaceGenerator<'_> {
-    fn c_func_name(&self, interface_name: Option<&WorldKey>, func: &Function) -> String {
+    fn c_func_name(&self, interface_id: Option<&WorldKey>, func: &Function) -> String {
         let mut name = String::new();
-        match interface_name {
-            Some(WorldKey::Name(k)) => name.push_str(&k.to_snake_case()),
-            Some(WorldKey::Interface(id)) => {
-                if !self.in_import {
-                    name.push_str("exports_");
-                }
-                let iface = &self.resolve.interfaces[*id];
-                let pkg = &self.resolve.packages[iface.package.unwrap()];
-                name.push_str(&pkg.name.namespace.to_snake_case());
-                name.push_str("_");
-                name.push_str(&pkg.name.name.to_snake_case());
-                name.push_str("_");
-                name.push_str(&iface.name.as_ref().unwrap().to_snake_case());
-            }
+        match interface_id {
+            Some(id) => name.push_str(&interface_identifier(id, &self.resolve, !self.in_import)),
             None => name.push_str(&self.gen.world.to_snake_case()),
         }
         name.push_str("_");
@@ -1585,6 +1683,7 @@ impl InterfaceGenerator<'_> {
         );
         let name = self.c_func_name(interface_name, func);
         let import_name = self.gen.names.tmp(&format!("__wasm_import_{name}",));
+        self.src.c_fns("extern ");
         match sig.results.len() {
             0 => self.src.c_fns("void"),
             1 => self.src.c_fns(wasm_type(sig.results[0])),
@@ -1606,6 +1705,7 @@ impl InterfaceGenerator<'_> {
 
         // Print the public facing signature into the header, and since that's
         // what we are defining also print it into the C file.
+        self.src.h_fns("extern ");
         let c_sig = self.print_sig(interface_name, func, !self.gen.opts.no_sig_flattening);
         self.src.c_adapters("\n");
         self.src.c_adapters(&c_sig.sig);
@@ -3118,40 +3218,106 @@ pub fn optional_owns_anything(
 
 pub fn to_c_ident(name: &str) -> String {
     match name {
-        // Escape C keywords.
-        // Source: https://en.cppreference.com/w/c/keyword
+        // Escape C and C++ keywords.
+        // Source: https://en.cppreference.com/w/cpp/keyword
+        "alignas" => "alignas_".into(),
+        "alignof" => "alignof_".into(),
+        "and" => "and_".into(),
+        "and_eq" => "and_eq_".into(),
+        "asm" => "asm_".into(),
+        "atomic_cancel" => "atomic_cancel_".into(),
+        "atomic_commit" => "atomic_commit_".into(),
+        "atomic_noexcept" => "atomic_noexcept_".into(),
         "auto" => "auto_".into(),
-        "else" => "else_".into(),
-        "long" => "long_".into(),
-        "switch" => "switch_".into(),
+        "bitand" => "bitand_".into(),
+        "bitor" => "bitor_".into(),
+        "bool" => "bool_".into(),
         "break" => "break_".into(),
-        "enum" => "enum_".into(),
-        "register" => "register_".into(),
-        "typedef" => "typedef_".into(),
         "case" => "case_".into(),
-        "extern" => "extern_".into(),
-        "return" => "return_".into(),
+        "catch" => "catch_".into(),
         "char" => "char_".into(),
-        "float" => "float_".into(),
-        "short" => "short_".into(),
-        "unsigned" => "unsigned_".into(),
+        "char8_t" => "char8_t_".into(),
+        "char16_t" => "char16_t_".into(),
+        "char32_t" => "char32_t_".into(),
+        "class" => "class_".into(),
+        "compl" => "compl_".into(),
+        "concept" => "concept_".into(),
         "const" => "const_".into(),
-        "for" => "for_".into(),
-        "signed" => "signed_".into(),
-        "void" => "void_".into(),
+        "consteval" => "consteval_".into(),
+        "constexpr" => "constexpr_".into(),
+        "constinit" => "constinit_".into(),
+        "const_cast" => "const_cast_".into(),
         "continue" => "continue_".into(),
-        "goto" => "goto_".into(),
-        "sizeof" => "sizeof_".into(),
-        "volatile" => "volatile_".into(),
+        "co_await" => "co_await_".into(),
+        "co_return" => "co_return_".into(),
+        "co_yield" => "co_yield_".into(),
+        "decltype" => "decltype_".into(),
         "default" => "default_".into(),
-        "if" => "if_".into(),
-        "static" => "static_".into(),
-        "while" => "while_".into(),
+        "delete" => "delete_".into(),
         "do" => "do_".into(),
-        "int" => "int_".into(),
-        "struct" => "struct_".into(),
-        "_Packed" => "_Packed_".into(),
         "double" => "double_".into(),
+        "dynamic_cast" => "dynamic_cast_".into(),
+        "else" => "else_".into(),
+        "enum" => "enum_".into(),
+        "explicit" => "explicit_".into(),
+        "export" => "export_".into(),
+        "extern" => "extern_".into(),
+        "false" => "false_".into(),
+        "float" => "float_".into(),
+        "for" => "for_".into(),
+        "friend" => "friend_".into(),
+        "goto" => "goto_".into(),
+        "if" => "if_".into(),
+        "inline" => "inline_".into(),
+        "int" => "int_".into(),
+        "long" => "long_".into(),
+        "mutable" => "mutable_".into(),
+        "namespace" => "namespace_".into(),
+        "new" => "new_".into(),
+        "noexcept" => "noexcept_".into(),
+        "not" => "not_".into(),
+        "not_eq" => "not_eq_".into(),
+        "nullptr" => "nullptr_".into(),
+        "operator" => "operator_".into(),
+        "or" => "or_".into(),
+        "or_eq" => "or_eq_".into(),
+        "private" => "private_".into(),
+        "protected" => "protected_".into(),
+        "public" => "public_".into(),
+        "reflexpr" => "reflexpr_".into(),
+        "register" => "register_".into(),
+        "reinterpret_cast" => "reinterpret_cast_".into(),
+        "requires" => "requires_".into(),
+        "return" => "return_".into(),
+        "short" => "short_".into(),
+        "signed" => "signed_".into(),
+        "sizeof" => "sizeof_".into(),
+        "static" => "static_".into(),
+        "static_assert" => "static_assert_".into(),
+        "static_cast" => "static_cast_".into(),
+        "struct" => "struct_".into(),
+        "switch" => "switch_".into(),
+        "synchronized" => "synchronized_".into(),
+        "template" => "template_".into(),
+        "this" => "this_".into(),
+        "thread_local" => "thread_local_".into(),
+        "throw" => "throw_".into(),
+        "true" => "true_".into(),
+        "try" => "try_".into(),
+        "typedef" => "typedef_".into(),
+        "typeid" => "typeid_".into(),
+        "typename" => "typename_".into(),
+        "union" => "union_".into(),
+        "unsigned" => "unsigned_".into(),
+        "using" => "using_".into(),
+        "virtual" => "virtual_".into(),
+        "void" => "void_".into(),
+        "volatile" => "volatile_".into(),
+        "wchar_t" => "wchar_t_".into(),
+        "while" => "while_".into(),
+        "xor" => "xor_".into(),
+        "xor_eq" => "xor_eq_".into(),
+        "_Packed" => "_Packed_".into(),
         s => s.to_snake_case(),
     }
 }
