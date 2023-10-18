@@ -406,6 +406,37 @@ impl WorldGenerator for CSharp {
         }
 
         src.push_str("\n");
+        src.push_str(
+            r#"
+                internal static class Intrinsics
+                {
+                    [UnmanagedCallersOnly(EntryPoint = "cabi_realloc")]
+                    internal static IntPtr cabi_realloc(IntPtr ptr, uint old_size, uint align, uint new_size)
+                    {
+                        if (new_size == 0)
+                        {
+                            if(old_size != 0)
+                            {
+                                Marshal.Release(ptr);
+                            }
+                            return new IntPtr((int)align);
+                        }
+                
+                        if (new_size > int.MaxValue)
+                        {
+                            throw new ArgumentException("Cannot allocate more that int.MaxValue", nameof(new_size));
+                        }
+                        
+                        if(old_size != 0)
+                        {
+                            return Marshal.ReAllocHGlobal(ptr, (int)new_size);
+                        }
+
+                        return Marshal.AllocHGlobal((int)new_size);
+                    }
+                }
+            "#,
+        );
         src.push_str("}\n");
 
         files.push(&format!("{name}.cs"), indent(&src).as_bytes());
@@ -602,7 +633,7 @@ impl InterfaceGenerator<'_> {
             .params
             .iter()
             .enumerate()
-            .map(|(i, param)| {
+            .map(|(_i, param)| {
                 let ty = self.type_name(&param.1);
                 let param_name = &param.0;
                 format!("{ty} {param_name}")
@@ -623,7 +654,7 @@ impl InterfaceGenerator<'_> {
         );
 
         let mut ret_struct_type = String::new();
-        if(self.gen.return_area_size > 0){
+        if self.gen.return_area_size > 0 {
             writeln!(ret_struct_type, r#"
                 private unsafe struct ReturnArea
                 {{
@@ -1412,7 +1443,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             }
 
             Instruction::StringLift { .. } => {
-                if(self.gen.in_import)
+                if self.gen.in_import
                 {
                     results.push(format!("returnArea.GetUTF8String(ptr)"));
                 }

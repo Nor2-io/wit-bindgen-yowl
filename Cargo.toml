@@ -11,7 +11,10 @@ CLI tool to generate bindings for WIT documents and the component model.
 """
 
 [workspace]
-members = ["crates/test-rust-wasm", "crates/wasi_snapshot_preview1"]
+members = [
+  "crates/test-rust-wasm",
+  "crates/wasi_snapshot_preview1",
+]
 resolver = "2"
 
 [workspace.package]
@@ -20,19 +23,19 @@ edition = "2021"
 [workspace.dependencies]
 anyhow = "1.0.72"
 bitflags = "2.3.3"
-heck = { version = "0.4", features = ["unicode"] }
+heck =  { version = "0.4", features = ["unicode"] }
 pulldown-cmark = { version = "0.9", default-features = false }
 clap = { version = "4.3.19", features = ["derive"] }
 env_logger = "0.10.0"
 indexmap = "2.0.0"
 
-wasm-encoder = { version="0.33.2", path = "../wasm-tools/crates/wasm-encoder" }
-wasm-metadata = {version="0.10.6", path = "../wasm-tools/crates/wasm-metadata" }
-wit-parser = {version="0.11.3", path = "../wasm-tools/crates/wit-parser" }
-wit-component = { version="0.14.4", path = "../wasm-tools/crates/wit-component" }
-wasmtime-wasi = { version="15.0.0", path = "../wasmtime/crates/wasi" }
+wasm-encoder = "0.35.0"
+wasmtime-wasi = "15.0.0"
+wasm-metadata = "0.10.9"
+wit-parser = "0.12"
+wit-component = "0.15.0"
 
-wit-bindgen-csharp = { path = 'crates/csharp', version = '0.12.0' }
+wit-bindgen-csharp = { path = 'crates/csharp', version = '0.10.0' }
 wit-bindgen-core = { path = 'crates/core', version = '0.12.0' }
 wit-bindgen-c = { path = 'crates/c', version = '0.12.0' }
 wit-bindgen-rust = { path = "crates/rust", version = "0.12.0" }
@@ -52,16 +55,12 @@ wit-bindgen-core = { workspace = true }
 wit-bindgen-rust = { workspace = true, features = ['clap'], optional = true }
 wit-bindgen-c = { workspace = true, features = ['clap'], optional = true }
 wit-bindgen-csharp = { workspace = true, features = ['clap'], optional = true }
-wit-bindgen-markdown = { workspace = true, features = [
-  'clap',
-], optional = true }
-wit-bindgen-teavm-java = { workspace = true, features = [
-  'clap',
-], optional = true }
+wit-bindgen-markdown = { workspace = true, features = ['clap'], optional = true }
+wit-bindgen-teavm-java = { workspace = true, features = ['clap'], optional = true }
 wit-bindgen-go = { workspace = true, features = ['clap'], optional = true }
 wit-component = { workspace = true }
 wasm-encoder = { workspace = true }
-wasmtime-wasi = { workspace = true }
+wasmtime-wasi = { workdpace = true }
 
 [features]
 default = [
@@ -81,6 +80,6 @@ go = ['dep:wit-bindgen-go']
 
 [dev-dependencies]
 heck = { workspace = true }
-wasmtime = { version = "15", path = "../wasmtime/crates/wasmtime", features = ['component-model'] }
+wasmtime = { version = "13", features = ['component-model'] }
 test-artifacts = { path = 'crates/test-rust-wasm/artifacts' }
 wit-parser = { workspace = true }

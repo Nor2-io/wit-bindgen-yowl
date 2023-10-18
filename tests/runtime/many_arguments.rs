@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::Wasi;
-use wasmtime::component::{Component, Linker, Instance};
 use wasmtime::Store;
+use wasmtime::component::{Component, Linker, Instance};
 use crate::TestConfigurer;
 
 wasmtime::component::bindgen!({
