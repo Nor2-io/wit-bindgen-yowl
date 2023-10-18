@@ -30,7 +30,7 @@ env_logger = "0.10.0"
 indexmap = "2.0.0"
 
 wasm-encoder = "0.35.0"
-wasmtime_wasi = "11.0.1"
+wasmtime-wasi = "15.0.0"
 wasm-metadata = "0.10.9"
 wit-parser = "0.12"
 wit-component = "0.15.0"

@@ -633,7 +633,7 @@ impl InterfaceGenerator<'_> {
             .params
             .iter()
             .enumerate()
-            .map(|(i, param)| {
+            .map(|(_i, param)| {
                 let ty = self.type_name(&param.1);
                 let param_name = &param.0;
                 format!("{ty} {param_name}")
@@ -654,7 +654,7 @@ impl InterfaceGenerator<'_> {
         );
 
         let mut ret_struct_type = String::new();
-        if(self.gen.return_area_size > 0){
+        if self.gen.return_area_size > 0 {
             writeln!(ret_struct_type, r#"
                 private unsafe struct ReturnArea
                 {{
@@ -1443,7 +1443,7 @@ impl Bindgen for FunctionBindgen<'_, '_> {
             }
 
             Instruction::StringLift { .. } => {
-                if(self.gen.in_import)
+                if self.gen.in_import
                 {
                     results.push(format!("returnArea.GetUTF8String(ptr)"));
                 }
